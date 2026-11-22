@@ -12,7 +12,7 @@ local GAMES = {
 		name = "Infinite Nights With Freddy",
 		placeId = 81156978660382,
 		lobbyPlaceId = 92415748858497,
-		link = "https://gitlab.com/ccome5215-netizen/scripts/-/raw/main/Nytix%20Hub(Infinite%20Nights%20With%20Freddy)",
+		link = "https://raw.githubusercontent.com/ccome5215-netizen/Nytix-Hub/refs/heads/main/Infinite%20Nights%20With%20Freddy%20(DOOM)",
 	},
 }
 
