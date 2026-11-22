@@ -244,35 +244,19 @@ local StatusLabel = makeInst("TextLabel", {
 	TextSize = 14,
 }, LoadingGroup)
 
-local LoadingClose = makeInst("TextButton", {
+local SkipButton = makeInst("TextButton", {
 	AnchorPoint = Vector2.new(1, 0),
 	Position = UDim2.new(1, -14, 0, 14),
-	Size = UDim2.fromOffset(34, 28),
-	BackgroundColor3 = Color3.fromRGB(180, 55, 55),
-	Text = "X",
+	Size = UDim2.fromOffset(64, 28),
+	BackgroundColor3 = COLOR_VIOLET,
+	Text = "Skip",
 	TextColor3 = COLOR_TEXT,
 	Font = Enum.Font.GothamBold,
-	TextSize = 16,
+	TextSize = 14,
 	AutoButtonColor = false,
 	BorderSizePixel = 0,
 }, LoadingGroup)
-addCorner(LoadingClose, 6)
-
-local loadingClosing = false
-track(LoadingClose.MouseButton1Click:Connect(function()
-	if loadingClosing then
-		return
-	end
-	loadingClosing = true
-	task.spawn(function()
-		local fade = TweenService:Create(LoadingGroup, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-			GroupTransparency = 1,
-		})
-		fade:Play()
-		fade.Completed:Wait()
-		cleanup()
-	end)
-end))
+addCorner(SkipButton, 6)
 
 local clock = 0
 track(RunService.Heartbeat:Connect(function(dt)
@@ -996,6 +980,36 @@ local function showDiscordWindow(nextScreen)
 	end))
 end
 
+local loadingDone = false
+
+local function finishLoading()
+	if loadingDone or not Alive then
+		return
+	end
+	loadingDone = true
+	TweenService:Create(BarFill, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.fromScale(1, 1),
+	}):Play()
+	TweenService:Create(LoadingGroup, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		GroupTransparency = 1,
+	}):Play()
+	showDiscordWindow(function()
+		if KEY_SYSTEM_ENABLED then
+			showKeyWindow()
+		else
+			showWindow()
+		end
+	end)
+	task.wait(0.45)
+	if Alive then
+		LoadingGui:Destroy()
+	end
+end
+
+track(SkipButton.MouseButton1Click:Connect(function()
+	task.spawn(finishLoading)
+end))
+
 task.spawn(function()
 	TweenService:Create(BarFill, TweenInfo.new(LOADING_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
 		Size = UDim2.fromScale(1, 1),
@@ -1011,27 +1025,11 @@ task.spawn(function()
 		local at = step[1] * LOADING_TIME
 		task.wait(at - last)
 		last = at
-		if not Alive then
+		if not Alive or loadingDone then
 			return
 		end
 		StatusLabel.Text = step[2]
 	end
 	task.wait(LOADING_TIME - last)
-	if not Alive then
-		return
-	end
-	TweenService:Create(LoadingGroup, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		GroupTransparency = 1,
-	}):Play()
-	showDiscordWindow(function()
-		if KEY_SYSTEM_ENABLED then
-			showKeyWindow()
-		else
-			showWindow()
-		end
-	end)
-	task.wait(0.45)
-	if Alive then
-		LoadingGui:Destroy()
-	end
+	finishLoading()
 end)
