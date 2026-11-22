@@ -9,9 +9,10 @@ local LocalPlayer = Players.LocalPlayer
 
 local GAMES = {
 	{
-		name = "Infinite Nights With Freddy",
+		name = "Infinite Nights With Freddy (DOOM)",
 		placeId = 81156978660382,
 		lobbyPlaceId = 92415748858497,
+		universeId = 8204806107,
 		link = "https://raw.githubusercontent.com/ccome5215-netizen/Nytix-Hub/refs/heads/main/Infinite%20Nights%20With%20Freddy%20(DOOM)",
 	},
 }
@@ -20,7 +21,8 @@ local LOADING_TIME = 3
 
 local KEY_SYSTEM_ENABLED = false
 local KEY = ""
-local GET_KEY_LINK = ""
+local KEY_FILE = "NytixHubKey.txt"
+local DISCORD_LINK = "https://discord.gg/npUUu2XCG2"
 
 local COLOR_BG = Color3.fromRGB(14, 9, 38)
 local COLOR_ROW = Color3.fromRGB(36, 24, 78)
@@ -429,15 +431,35 @@ local warnings = {}
 for index, entry in ipairs(GAMES) do
 	local supported, label, inLobby = getState(entry)
 	local row = makeInst("Frame", {
-		Size = UDim2.new(1, 0, 0, 46),
+		Size = UDim2.new(1, 0, 0, 54),
 		BackgroundColor3 = COLOR_ROW,
 		BorderSizePixel = 0,
 		LayoutOrder = index,
 	}, ListFrame)
 	addCorner(row, 8)
+	local textOffset = 10
+	if entry.universeId then
+		textOffset = 56
+		local iconHolder = makeInst("Frame", {
+			Size = UDim2.fromOffset(38, 38),
+			Position = UDim2.new(0, 8, 0.5, -19),
+			BackgroundColor3 = COLOR_VIOLET,
+			BorderSizePixel = 0,
+		}, row)
+		addCorner(iconHolder, 8)
+		addGradient(iconHolder, 45)
+		local icon = makeInst("ImageLabel", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Image = "rbxthumb://type=GameIcon&id=" .. tostring(entry.universeId) .. "&w=150&h=150",
+			ScaleType = Enum.ScaleType.Crop,
+			BorderSizePixel = 0,
+		}, iconHolder)
+		addCorner(icon, 8)
+	end
 	makeInst("TextLabel", {
-		Size = UDim2.new(1, -140, 1, 0),
-		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(1, -(textOffset + 130), 1, 0),
+		Position = UDim2.fromOffset(textOffset, 0),
 		BackgroundTransparency = 1,
 		Text = entry.name,
 		TextColor3 = COLOR_TEXT,
@@ -575,6 +597,43 @@ local function showWindow()
 	TweenService:Create(WindowScale, info, { Scale = 1 }):Play()
 end
 
+local function readSavedKey()
+	if type(isfile) ~= "function" or type(readfile) ~= "function" then
+		return nil
+	end
+	local ok, content = pcall(function()
+		if isfile(KEY_FILE) then
+			return readfile(KEY_FILE)
+		end
+		return nil
+	end)
+	if ok and type(content) == "string" then
+		content = content:gsub("^%s+", ""):gsub("%s+$", "")
+		if content ~= "" then
+			return content
+		end
+	end
+	return nil
+end
+
+local function saveKey(text)
+	if type(writefile) == "function" then
+		pcall(writefile, KEY_FILE, text)
+	end
+end
+
+local function deleteSavedKey()
+	if type(delfile) == "function" then
+		pcall(function()
+			if isfile(KEY_FILE) then
+				delfile(KEY_FILE)
+			end
+		end)
+	elseif type(writefile) == "function" then
+		pcall(writefile, KEY_FILE, "")
+	end
+end
+
 local function showKeyWindow()
 	local KeyGui = makeInst("ScreenGui", {
 		Name = randomName(),
@@ -587,7 +646,7 @@ local function showKeyWindow()
 	local KeyGroup = makeInst("CanvasGroup", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(keyW, 200),
+		Size = UDim2.fromOffset(keyW, 226),
 		BackgroundColor3 = COLOR_BG,
 		BorderSizePixel = 0,
 		GroupTransparency = 1,
@@ -605,7 +664,7 @@ local function showKeyWindow()
 		Size = UDim2.new(1, -56, 1, 0),
 		Position = UDim2.fromOffset(12, 0),
 		BackgroundTransparency = 1,
-		Text = "Nytix Hub Key",
+		Text = "Key System",
 		TextColor3 = COLOR_TEXT,
 		Font = Enum.Font.GothamBold,
 		TextSize = 16,
@@ -625,10 +684,10 @@ local function showKeyWindow()
 	addCorner(KeyClose, 6)
 	local KeyBox = makeInst("TextBox", {
 		Size = UDim2.new(1, -24, 0, 36),
-		Position = UDim2.fromOffset(12, 50),
+		Position = UDim2.fromOffset(12, 48),
 		BackgroundColor3 = COLOR_ROW,
 		Text = "",
-		PlaceholderText = "Enter key",
+		PlaceholderText = "Put it Key in here",
 		PlaceholderColor3 = COLOR_MUTED,
 		TextColor3 = COLOR_TEXT,
 		Font = Enum.Font.Gotham,
@@ -638,39 +697,45 @@ local function showKeyWindow()
 	}, KeyGroup)
 	addCorner(KeyBox, 6)
 	local KeyStatus = makeInst("TextLabel", {
-		Size = UDim2.new(1, -24, 0, 22),
-		Position = UDim2.fromOffset(12, 92),
+		Size = UDim2.new(1, -24, 0, 34),
+		Position = UDim2.fromOffset(12, 88),
 		BackgroundTransparency = 1,
 		Text = "",
 		TextColor3 = COLOR_WARN,
 		Font = Enum.Font.Gotham,
 		TextSize = 12,
+		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
 	}, KeyGroup)
-	local CheckButton = makeInst("TextButton", {
-		Size = UDim2.new(0.5, -18, 0, 36),
-		Position = UDim2.fromOffset(12, 126),
+	local EnterButton = makeInst("TextButton", {
+		Size = UDim2.new(1, -24, 0, 36),
+		Position = UDim2.fromOffset(12, 128),
 		BackgroundColor3 = COLOR_CYAN,
-		Text = "Check Key",
+		Text = "Enter Key",
 		TextColor3 = COLOR_TEXT,
 		Font = Enum.Font.GothamBold,
-		TextSize = 14,
+		TextScaled = true,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 	}, KeyGroup)
-	addCorner(CheckButton, 6)
-	local GetButton = makeInst("TextButton", {
-		Size = UDim2.new(0.5, -18, 0, 36),
-		Position = UDim2.new(0.5, 6, 0, 126),
+	addCorner(EnterButton, 6)
+	makeInst("UITextSizeConstraint", { MaxTextSize = 14, MinTextSize = 8 }, EnterButton)
+	makeInst("UIPadding", { PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4) }, EnterButton)
+	local CopyButton = makeInst("TextButton", {
+		Size = UDim2.new(1, -24, 0, 36),
+		Position = UDim2.fromOffset(12, 174),
 		BackgroundColor3 = COLOR_VIOLET,
-		Text = "Get Key",
+		Text = "Copy Link",
 		TextColor3 = COLOR_TEXT,
 		Font = Enum.Font.GothamBold,
-		TextSize = 14,
+		TextScaled = true,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 	}, KeyGroup)
-	addCorner(GetButton, 6)
+	addCorner(CopyButton, 6)
+	makeInst("UITextSizeConstraint", { MaxTextSize = 14, MinTextSize = 8 }, CopyButton)
+	makeInst("UIPadding", { PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4) }, CopyButton)
 	local info = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	TweenService:Create(KeyGroup, info, { GroupTransparency = 0 }):Play()
 	TweenService:Create(KeyScale, info, { Scale = 1 }):Play()
@@ -692,34 +757,102 @@ local function showKeyWindow()
 	track(KeyClose.MouseButton1Click:Connect(function()
 		fadeKey(cleanup)
 	end))
-	track(GetButton.MouseButton1Click:Connect(function()
-		if GET_KEY_LINK == "" or type(setclipboard) ~= "function" then
-			KeyStatus.TextColor3 = COLOR_WARN
-			KeyStatus.Text = "Key link is not available yet."
+	local verifying = false
+	local function verify(text, automatic)
+		if verifying or keyDone then
 			return
 		end
-		local ok = pcall(setclipboard, GET_KEY_LINK)
-		KeyStatus.TextColor3 = ok and COLOR_MUTED or COLOR_WARN
-		KeyStatus.Text = ok and "Link copied." or "Could not copy the link."
-	end))
-	track(CheckButton.MouseButton1Click:Connect(function()
-		if KEY == "" then
-			KeyStatus.TextColor3 = COLOR_WARN
-			KeyStatus.Text = "No key is set yet."
+		verifying = true
+		KeyStatus.Text = ""
+		EnterButton.BackgroundColor3 = COLOR_GRAY
+		for step = 0, 3 do
+			if not Alive then
+				return
+			end
+			EnterButton.Text = "Verifying" .. string.rep(".", (step % 3) + 1)
+			task.wait(0.25)
+		end
+		if not Alive then
 			return
 		end
-		if KeyBox.Text == KEY then
+		local correct = KEY ~= "" and text == KEY
+		if correct then
+			if automatic then
+				EnterButton.Text = "Verified"
+				KeyStatus.TextColor3 = COLOR_MUTED
+				KeyStatus.Text = "Saved Key is correct"
+				task.wait(0.8)
+			else
+				saveKey(text)
+			end
+			if not Alive then
+				return
+			end
 			fadeKey(function()
-				if KeyGui then
-					KeyGui:Destroy()
-				end
+				KeyGui:Destroy()
 			end)
 			showWindow()
-		else
-			KeyStatus.TextColor3 = COLOR_WARN
-			KeyStatus.Text = "Wrong key."
+			return
 		end
+		if automatic then
+			deleteSavedKey()
+			KeyBox.Text = ""
+			KeyStatus.TextColor3 = COLOR_WARN
+			KeyStatus.Text = "Key Has Been Changed. Go to Discord and get the new key."
+			EnterButton.Text = "Enter Key"
+			EnterButton.BackgroundColor3 = COLOR_CYAN
+		else
+			EnterButton.Text = "Wrong Key"
+			EnterButton.BackgroundColor3 = Color3.fromRGB(180, 55, 55)
+			task.wait(1.5)
+			if not Alive then
+				return
+			end
+			EnterButton.Text = "Enter Key"
+			EnterButton.BackgroundColor3 = COLOR_CYAN
+		end
+		verifying = false
+	end
+	track(EnterButton.MouseButton1Click:Connect(function()
+		task.spawn(verify, KeyBox.Text, false)
 	end))
+	local copying = false
+	track(CopyButton.MouseButton1Click:Connect(function()
+		if copying then
+			return
+		end
+		copying = true
+		task.spawn(function()
+			if type(setclipboard) ~= "function" then
+				CopyButton.Text = "Your executor didn't have this function"
+				CopyButton.BackgroundColor3 = Color3.fromRGB(180, 55, 55)
+			else
+				local ok = pcall(setclipboard, DISCORD_LINK)
+				if ok then
+					CopyButton.Text = "Copied Link"
+					CopyButton.BackgroundColor3 = Color3.fromRGB(50, 170, 80)
+				else
+					CopyButton.Text = "Copy Link Failed"
+					CopyButton.BackgroundColor3 = Color3.fromRGB(180, 55, 55)
+				end
+			end
+			task.wait(1.5)
+			if not Alive then
+				return
+			end
+			CopyButton.Text = "Copy Link"
+			CopyButton.BackgroundColor3 = COLOR_VIOLET
+			copying = false
+		end)
+	end))
+	local savedKey = readSavedKey()
+	if savedKey then
+		KeyBox.Text = savedKey
+		task.spawn(function()
+			task.wait(0.45)
+			verify(savedKey, true)
+		end)
+	end
 end
 
 task.spawn(function()
