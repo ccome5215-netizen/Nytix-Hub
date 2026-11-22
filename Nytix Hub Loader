@@ -855,6 +855,147 @@ local function showKeyWindow()
 	end
 end
 
+local function showDiscordWindow(nextScreen)
+	local DiscordGui = makeInst("ScreenGui", {
+		Name = randomName(),
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		DisplayOrder = 1999,
+	}, getGuiParent())
+	table.insert(Guis, DiscordGui)
+	local boxW = math.clamp(viewport.X - 40, 240, 320)
+	local DiscordGroup = makeInst("CanvasGroup", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(boxW, 206),
+		BackgroundColor3 = COLOR_BG,
+		BorderSizePixel = 0,
+		GroupTransparency = 1,
+		Active = true,
+	}, DiscordGui)
+	addCorner(DiscordGroup, 10)
+	local DiscordScale = makeInst("UIScale", { Scale = 0.92 }, DiscordGroup)
+	local DiscordTitle = makeInst("Frame", {
+		Size = UDim2.new(1, 0, 0, 36),
+		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+		BorderSizePixel = 0,
+	}, DiscordGroup)
+	addGradient(DiscordTitle, 0)
+	makeInst("TextLabel", {
+		Size = UDim2.new(1, -56, 1, 0),
+		Position = UDim2.fromOffset(12, 0),
+		BackgroundTransparency = 1,
+		Text = "My Discord Server",
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, DiscordTitle)
+	local DiscordClose = makeInst("TextButton", {
+		Size = UDim2.fromOffset(28, 24),
+		Position = UDim2.new(1, -36, 0.5, -12),
+		BackgroundColor3 = Color3.fromRGB(180, 55, 55),
+		Text = "X",
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, DiscordTitle)
+	addCorner(DiscordClose, 6)
+	makeInst("TextLabel", {
+		Size = UDim2.new(1, -24, 0, 54),
+		Position = UDim2.fromOffset(12, 46),
+		BackgroundTransparency = 1,
+		Text = "Join it if you want to see the changelog or other things.",
+		TextColor3 = COLOR_MUTED,
+		Font = Enum.Font.Gotham,
+		TextSize = 14,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+	}, DiscordGroup)
+	local DiscordCopy = makeInst("TextButton", {
+		Size = UDim2.new(1, -24, 0, 36),
+		Position = UDim2.fromOffset(12, 106),
+		BackgroundColor3 = COLOR_VIOLET,
+		Text = "Copy Discord Link",
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextScaled = true,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, DiscordGroup)
+	addCorner(DiscordCopy, 6)
+	makeInst("UITextSizeConstraint", { MaxTextSize = 14, MinTextSize = 8 }, DiscordCopy)
+	makeInst("UIPadding", { PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4) }, DiscordCopy)
+	local DiscordContinue = makeInst("TextButton", {
+		Size = UDim2.new(1, -24, 0, 36),
+		Position = UDim2.fromOffset(12, 152),
+		BackgroundColor3 = COLOR_CYAN,
+		Text = "Continue",
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, DiscordGroup)
+	addCorner(DiscordContinue, 6)
+	local info = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(DiscordGroup, info, { GroupTransparency = 0 }):Play()
+	TweenService:Create(DiscordScale, info, { Scale = 1 }):Play()
+	local finished = false
+	local function proceed()
+		if finished then
+			return
+		end
+		finished = true
+		task.spawn(function()
+			local out = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			local fade = TweenService:Create(DiscordGroup, out, { GroupTransparency = 1 })
+			TweenService:Create(DiscordScale, out, { Scale = 0.9 }):Play()
+			fade:Play()
+			fade.Completed:Wait()
+			if not Alive then
+				return
+			end
+			DiscordGui:Destroy()
+			nextScreen()
+		end)
+	end
+	track(DiscordClose.MouseButton1Click:Connect(proceed))
+	track(DiscordContinue.MouseButton1Click:Connect(proceed))
+	local copying = false
+	track(DiscordCopy.MouseButton1Click:Connect(function()
+		if copying then
+			return
+		end
+		copying = true
+		task.spawn(function()
+			if type(setclipboard) ~= "function" then
+				DiscordCopy.Text = "Your executor didn't have this function"
+				DiscordCopy.BackgroundColor3 = Color3.fromRGB(180, 55, 55)
+			else
+				local ok = pcall(setclipboard, DISCORD_LINK)
+				if ok then
+					DiscordCopy.Text = "Copied Link"
+					DiscordCopy.BackgroundColor3 = Color3.fromRGB(50, 170, 80)
+				else
+					DiscordCopy.Text = "Copy Link Failed"
+					DiscordCopy.BackgroundColor3 = Color3.fromRGB(180, 55, 55)
+				end
+			end
+			task.wait(1.5)
+			if not Alive then
+				return
+			end
+			DiscordCopy.Text = "Copy Discord Link"
+			DiscordCopy.BackgroundColor3 = COLOR_VIOLET
+			copying = false
+		end)
+	end))
+end
+
 task.spawn(function()
 	TweenService:Create(BarFill, TweenInfo.new(LOADING_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
 		Size = UDim2.fromScale(1, 1),
@@ -882,11 +1023,13 @@ task.spawn(function()
 	TweenService:Create(LoadingGroup, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		GroupTransparency = 1,
 	}):Play()
-	if KEY_SYSTEM_ENABLED then
-		showKeyWindow()
-	else
-		showWindow()
-	end
+	showDiscordWindow(function()
+		if KEY_SYSTEM_ENABLED then
+			showKeyWindow()
+		else
+			showWindow()
+		end
+	end)
 	task.wait(0.45)
 	if Alive then
 		LoadingGui:Destroy()
