@@ -1,0 +1,4085 @@
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+	task.wait()
+	LocalPlayer = Players.LocalPlayer
+end
+
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local function resolveFunction(name)
+	local ok, value = pcall(function()
+		return getgenv()[name]
+	end)
+	if ok and value then
+		return value
+	end
+	ok, value = pcall(function()
+		return getfenv(0)[name]
+	end)
+	if ok and value then
+		return value
+	end
+	ok, value = pcall(function()
+		return _G[name]
+	end)
+	if ok and value then
+		return value
+	end
+	return nil
+end
+
+local Env = {}
+for _, name in ipairs({ "isnetworkowner", "fireproximityprompt", "hookmetamethod", "getnamecallmethod", "newcclosure", "gethui", "sethiddenproperty", "setsimulationradius" }) do
+	Env[name] = resolveFunction(name)
+end
+
+local GlobalEnv = nil
+do
+	local ok, value = pcall(function()
+		return getgenv()
+	end)
+	GlobalEnv = ok and value or _G
+end
+
+if GlobalEnv.FreddyCleanup then
+	pcall(GlobalEnv.FreddyCleanup)
+	GlobalEnv.FreddyCleanup = nil
+end
+
+if GlobalEnv.FreddyAntiAfk then
+	pcall(function()
+		GlobalEnv.FreddyAntiAfk:Disconnect()
+	end)
+	GlobalEnv.FreddyAntiAfk = nil
+end
+
+local Features = {}
+local CleanupFns = {}
+local Selected = { animatronics = {}, players = {}, tool = nil }
+
+local okVirtualUser, VirtualUser = pcall(function()
+	return game:GetService("VirtualUser")
+end)
+
+local AntiAfkConn = LocalPlayer.Idled:Connect(function()
+	if okVirtualUser and VirtualUser then
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+	end
+end)
+
+GlobalEnv.FreddyAntiAfk = AntiAfkConn
+
+local function getGuiParent()
+	if Env.gethui then
+		local ok, hui = pcall(Env.gethui)
+		if ok and hui then
+			return hui
+		end
+	end
+	return PlayerGui
+end
+
+local ToastGui = nil
+local ToastHolder = nil
+
+local function notify(title, text)
+	pcall(function()
+		if not ToastGui or not ToastGui.Parent then
+			ToastGui = Instance.new("ScreenGui")
+			ToastGui.Name = "FreddyToast"
+			ToastGui.ResetOnSpawn = false
+			ToastGui.IgnoreGuiInset = true
+			ToastGui.DisplayOrder = 1001
+			ToastGui.Parent = getGuiParent()
+			ToastHolder = Instance.new("Frame")
+			ToastHolder.AnchorPoint = Vector2.new(0.5, 0)
+			ToastHolder.Position = UDim2.new(0.5, 0, 0, 10)
+			ToastHolder.Size = UDim2.fromOffset(280, 0)
+			ToastHolder.AutomaticSize = Enum.AutomaticSize.Y
+			ToastHolder.BackgroundTransparency = 1
+			ToastHolder.Parent = ToastGui
+			local layout = Instance.new("UIListLayout")
+			layout.Padding = UDim.new(0, 6)
+			layout.SortOrder = Enum.SortOrder.LayoutOrder
+			layout.Parent = ToastHolder
+		end
+		local box = Instance.new("Frame")
+		box.Size = UDim2.new(1, 0, 0, 52)
+		box.BackgroundColor3 = Color3.fromRGB(20, 12, 48)
+		box.BackgroundTransparency = 0.1
+		box.BorderSizePixel = 0
+		box.Parent = ToastHolder
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = box
+		local titleLabel = Instance.new("TextLabel")
+		titleLabel.Size = UDim2.new(1, -16, 0, 22)
+		titleLabel.Position = UDim2.fromOffset(8, 5)
+		titleLabel.BackgroundTransparency = 1
+		titleLabel.Text = title
+		titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		titleLabel.Font = Enum.Font.GothamBold
+		titleLabel.TextSize = 14
+		titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+		titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		titleLabel.Parent = box
+		local bodyLabel = Instance.new("TextLabel")
+		bodyLabel.Size = UDim2.new(1, -16, 0, 20)
+		bodyLabel.Position = UDim2.fromOffset(8, 27)
+		bodyLabel.BackgroundTransparency = 1
+		bodyLabel.Text = text
+		bodyLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
+		bodyLabel.Font = Enum.Font.Gotham
+		bodyLabel.TextSize = 13
+		bodyLabel.TextXAlignment = Enum.TextXAlignment.Left
+		bodyLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		bodyLabel.Parent = box
+		task.delay(4, function()
+			if box.Parent then
+				box:Destroy()
+			end
+		end)
+	end)
+end
+
+local function findPath(root, ...)
+	local current = root
+	for _, name in ipairs({ ... }) do
+		if not current then
+			return nil
+		end
+		current = current:FindFirstChild(name)
+	end
+	return current
+end
+
+local function getChar()
+	return LocalPlayer.Character
+end
+
+local function getRoot()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getCFrame(inst)
+	if not inst then
+		return nil
+	end
+	if inst:IsA("BasePart") then
+		return inst.CFrame
+	end
+	if inst:IsA("Attachment") then
+		return inst.WorldCFrame
+	end
+	if inst:IsA("Model") then
+		return inst:GetPivot()
+	end
+	local part = inst:FindFirstChildWhichIsA("BasePart", true)
+	if part then
+		return part.CFrame
+	end
+	if inst.Parent then
+		return getCFrame(inst.Parent)
+	end
+	return nil
+end
+
+local function getRootPart(model)
+	return model.PrimaryPart
+		or model:FindFirstChild("HumanoidRootPart")
+		or model:FindFirstChild("Head")
+		or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function teleportTo(cf)
+	local root = getRoot()
+	if root and cf then
+		root.CFrame = cf
+		root.AssemblyLinearVelocity = Vector3.zero
+	end
+end
+
+local holdBusy = {}
+
+local function firePrompt(prompt)
+	local fire = Env.fireproximityprompt
+	if fire then
+		pcall(fire, prompt)
+		return
+	end
+	if holdBusy[prompt] then
+		return
+	end
+	holdBusy[prompt] = true
+	task.spawn(function()
+		pcall(function()
+			prompt:InputHoldBegin()
+			task.wait(math.max(prompt.HoldDuration, 0) + 0.05)
+			prompt:InputHoldEnd()
+		end)
+		holdBusy[prompt] = nil
+	end)
+end
+
+local function ownsPart(part)
+	if part.Anchored then
+		return false
+	end
+	local fn = Env.isnetworkowner
+	if fn then
+		local ok, result = pcall(fn, part)
+		return ok and result == true
+	end
+	local ok, age = pcall(function()
+		return part.ReceiveAge
+	end)
+	return ok and age == 0
+end
+
+local function boostSimulation()
+	if Env.setsimulationradius then
+		pcall(Env.setsimulationradius, 1e9, 1e9)
+		return
+	end
+	if Env.sethiddenproperty then
+		pcall(Env.sethiddenproperty, LocalPlayer, "SimulationRadius", 1e9)
+		pcall(Env.sethiddenproperty, LocalPlayer, "MaximumSimulationRadius", 1e9)
+	end
+end
+
+local Own = { cache = setmetatable({}, { __mode = "k" }), windowStart = 0, used = 0 }
+
+function Own.check(part)
+	local now = os.clock()
+	local entry = Own.cache[part]
+	if entry and now - entry.time < 1.5 then
+		return entry.value
+	end
+	if now - Own.windowStart >= 0.016 then
+		Own.windowStart = now
+		Own.used = 0
+	end
+	if Own.used >= 15 then
+		return entry ~= nil and entry.value
+	end
+	Own.used += 1
+	local value = ownsPart(part)
+	Own.cache[part] = { value = value, time = now }
+	return value
+end
+
+local function isGuiVisible(obj)
+	local current = obj
+	while current and current ~= PlayerGui do
+		if current:IsA("GuiObject") then
+			if not current.Visible then
+				return false
+			end
+		elseif current:IsA("ScreenGui") then
+			if not current.Enabled then
+				return false
+			end
+		end
+		current = current.Parent
+	end
+	return current ~= nil
+end
+
+local function watchWorkspaceFolder(name, onAdd, onRemove)
+	local handle = { conns = {}, folder = nil }
+	local function bind(folder)
+		for _, conn in ipairs(handle.conns) do
+			conn:Disconnect()
+		end
+		handle.conns = {}
+		handle.folder = folder
+		if not folder then
+			return
+		end
+		table.insert(handle.conns, folder.ChildAdded:Connect(onAdd))
+		table.insert(handle.conns, folder.ChildRemoved:Connect(onRemove))
+		for _, child in ipairs(folder:GetChildren()) do
+			onAdd(child)
+		end
+	end
+	handle.addConn = Workspace.ChildAdded:Connect(function(child)
+		if child.Name == name then
+			bind(child)
+		end
+	end)
+	handle.removeConn = Workspace.ChildRemoved:Connect(function(child)
+		if child == handle.folder then
+			bind(nil)
+		end
+	end)
+	bind(Workspace:FindFirstChild(name))
+	function handle.Stop()
+		handle.addConn:Disconnect()
+		handle.removeConn:Disconnect()
+		for _, conn in ipairs(handle.conns) do
+			conn:Disconnect()
+		end
+		handle.conns = {}
+		handle.folder = nil
+	end
+	return handle
+end
+
+local Jobs = {}
+local Scheduler = { running = false, prevTool = nil }
+local AutoSlap = { on = false, token = 0 }
+
+local function resetCamera()
+	local cam = Workspace.CurrentCamera
+	local hum = getHum()
+	if cam then
+		cam.CameraType = Enum.CameraType.Custom
+		if hum then
+			cam.CameraSubject = hum
+		end
+	end
+end
+
+local function freezeCamera()
+	local cam = Workspace.CurrentCamera
+	if cam and cam.CameraType ~= Enum.CameraType.Scriptable then
+		cam.CameraType = Enum.CameraType.Scriptable
+	end
+end
+
+local function cameraHeldByJob()
+	for _, job in ipairs(Jobs) do
+		if job.freezeCam and job.active then
+			return true
+		end
+	end
+	return false
+end
+
+local function findToolIn(container, lowered)
+	if not container then
+		return nil
+	end
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Tool") and child.Name:lower() == lowered then
+			return child
+		end
+	end
+	return nil
+end
+
+local function findToolByName(name)
+	local lowered = name:lower()
+	return findToolIn(getChar(), lowered) or findToolIn(LocalPlayer:FindFirstChildOfClass("Backpack"), lowered)
+end
+
+local function maintainJobTool(job)
+	if AutoSlap.on then
+		return
+	end
+	for _, name in ipairs(job.toolNames) do
+		local tool = findToolByName(name)
+		if tool then
+			local hum = getHum()
+			if hum and tool.Parent ~= getChar() then
+				pcall(function()
+					hum:EquipTool(tool)
+				end)
+			end
+			return
+		end
+	end
+end
+
+local function ownsJobTool(job)
+	for _, name in ipairs(job.toolNames) do
+		if findToolByName(name) then
+			return true
+		end
+	end
+	return false
+end
+
+local function toolHeldByJob()
+	for _, job in ipairs(Jobs) do
+		if job.toolNames and job.active then
+			return true
+		end
+	end
+	return false
+end
+
+local function restoreJobTool(job)
+	local prev = Scheduler.prevTool
+	Scheduler.prevTool = nil
+	if AutoSlap.on then
+		return
+	end
+	local char = getChar()
+	local hum = getHum()
+	if not char or not hum then
+		return
+	end
+	if prev and prev.Parent and (prev.Parent == char or prev.Parent == LocalPlayer:FindFirstChildOfClass("Backpack")) then
+		pcall(function()
+			hum:EquipTool(prev)
+		end)
+		return
+	end
+	for _, name in ipairs(job.toolNames) do
+		if findToolIn(char, name:lower()) then
+			pcall(function()
+				hum:UnequipTools()
+			end)
+			return
+		end
+	end
+end
+
+local function finishJob(job)
+	job.active = false
+	local origin = job.origin
+	job.origin = nil
+	if job.onFinish then
+		pcall(job.onFinish)
+	end
+	if job.freezeCam and not cameraHeldByJob() then
+		resetCamera()
+	end
+	if job.toolNames and not toolHeldByJob() then
+		restoreJobTool(job)
+	end
+	if job.returns and origin then
+		teleportTo(origin)
+	end
+end
+
+local function anyJobOn()
+	for _, job in ipairs(Jobs) do
+		if job.enabled or job.active then
+			return true
+		end
+	end
+	return false
+end
+
+local function schedulerTick()
+	local root = getRoot()
+	if not root then
+		return
+	end
+	for _, job in ipairs(Jobs) do
+		if job.enabled or job.active then
+			local okWants, needs = pcall(job.wants)
+			if okWants and needs then
+				if not job.active then
+					if job.toolNames and not AutoSlap.on and not toolHeldByJob() then
+						local char = getChar()
+						Scheduler.prevTool = char and char:FindFirstChildOfClass("Tool")
+					end
+					job.active = true
+					job.origin = root.CFrame
+				end
+				if job.freezeCam then
+					freezeCamera()
+				end
+				if job.toolNames then
+					maintainJobTool(job)
+				end
+				pcall(job.step)
+				return job
+			elseif job.active then
+				finishJob(job)
+			end
+		elseif job.idle then
+			job.idle()
+		end
+	end
+	return nil
+end
+
+local function ensureScheduler()
+	if Scheduler.running then
+		return
+	end
+	Scheduler.running = true
+	task.spawn(function()
+		while anyJobOn() do
+			local ran = schedulerTick()
+			if ran and ran.fast then
+				task.wait()
+			else
+				task.wait(0.1)
+			end
+		end
+		for _, job in ipairs(Jobs) do
+			if job.idle then
+				pcall(job.idle)
+			end
+		end
+		Scheduler.running = false
+	end)
+end
+
+local function setJob(job, value)
+	job.enabled = value
+	if value then
+		ensureScheduler()
+	end
+end
+
+local TripStates = {
+	Enum.HumanoidStateType.Ragdoll,
+	Enum.HumanoidStateType.FallingDown,
+	Enum.HumanoidStateType.PlatformStanding,
+	Enum.HumanoidStateType.Physics,
+}
+
+local function applyTripGuard(job)
+	local hum = getHum()
+	if not hum then
+		return
+	end
+	if job.guardHum ~= hum then
+		job.guardHum = hum
+		pcall(function()
+			for _, state in ipairs(TripStates) do
+				hum:SetStateEnabled(state, false)
+			end
+		end)
+	end
+	if hum.PlatformStand then
+		hum.PlatformStand = false
+	end
+	local current = hum:GetState()
+	if table.find(TripStates, current) then
+		pcall(function()
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end)
+	end
+end
+
+local function releaseTripGuard(job)
+	local hum = job.guardHum
+	job.guardHum = nil
+	if hum and hum.Parent then
+		pcall(function()
+			for _, state in ipairs(TripStates) do
+				hum:SetStateEnabled(state, true)
+			end
+		end)
+	end
+end
+
+local EscapeJob = {
+	enabled = false,
+	active = false,
+	returns = false,
+}
+
+function EscapeJob.wants()
+	local endPos = findPath(Workspace, "Map", "ImportantSpots", "EndPos")
+	if not endPos then
+		return false
+	end
+	local highlight = endPos:FindFirstChild("EscapeHighlight")
+	local shopGui = endPos:FindFirstChild("ShopGui")
+	local prompt = endPos:FindFirstChild("ProximityPrompt")
+	local label = findPath(PlayerGui, "GUI", "In-Game", "TimeFrame", "TimingLabel")
+	if not highlight or not shopGui or not prompt or not label then
+		return false
+	end
+	return highlight.Enabled == true and shopGui.Enabled == false and label.Text == "ESCAPE" and isGuiVisible(label)
+end
+
+function EscapeJob.step()
+	local endPos = findPath(Workspace, "Map", "ImportantSpots", "EndPos")
+	local prompt = endPos and endPos:FindFirstChild("ProximityPrompt")
+	if not endPos or not prompt then
+		return
+	end
+	teleportTo(getCFrame(endPos))
+	firePrompt(prompt)
+end
+
+local GeneratorJob = {
+	enabled = false,
+	active = false,
+	returns = true,
+	fast = true,
+	freezeCam = true,
+	toolNames = { "Electrified wrench", "Wrench" },
+}
+
+local function getGeneratorParts()
+	local promptPart = findPath(Workspace, "Map", "ImportantSpots", "PowerBox", "Prompt")
+	if not promptPart then
+		return nil
+	end
+	local attachment = promptPart:FindFirstChild("Attachment")
+	local guiOne = attachment and attachment:FindFirstChild("BillboardGui")
+	local guiTwo = attachment and attachment:FindFirstChild("BillboardGui2")
+	local prompt = promptPart:FindFirstChild("ProximityPrompt")
+	return guiOne, guiTwo, prompt
+end
+
+function GeneratorJob.wants()
+	local guiOne, guiTwo, prompt = getGeneratorParts()
+	if not guiOne or not guiTwo or not prompt then
+		return false
+	end
+	if GeneratorJob.active then
+		return guiOne.Enabled == true or guiTwo.Enabled == true
+	end
+	return guiOne.Enabled == true and guiTwo.Enabled == true
+end
+
+function GeneratorJob.step()
+	local _, _, prompt = getGeneratorParts()
+	if not prompt then
+		return
+	end
+	teleportTo(getCFrame(prompt))
+	local times = ownsJobTool(GeneratorJob) and 1 or 30
+	for _ = 1, times do
+		firePrompt(prompt)
+	end
+end
+
+local MusicBoxJob = {
+	enabled = false,
+	active = false,
+	returns = true,
+	fast = true,
+}
+
+local function getMusicBoxPrompt()
+	return findPath(Workspace, "Map", "ImportantSpots", "MusicBox", "Prompt", "Prompt")
+end
+
+local function getMusicBoxValue(prompt)
+	local text = tostring(prompt.ObjectText or "")
+	local digits = text:match("%d+%.?%d*")
+	return digits and tonumber(digits) or nil
+end
+
+function MusicBoxJob.wants()
+	local prompt = getMusicBoxPrompt()
+	if not prompt or not prompt:IsA("ProximityPrompt") then
+		return false
+	end
+	local value = getMusicBoxValue(prompt)
+	if not value then
+		return false
+	end
+	if MusicBoxJob.active then
+		return value < 90
+	end
+	return value <= 15
+end
+
+function MusicBoxJob.step()
+	local prompt = getMusicBoxPrompt()
+	if not prompt then
+		return
+	end
+	teleportTo(getCFrame(prompt))
+	firePrompt(prompt)
+end
+
+local TrashJob = {
+	enabled = false,
+	active = false,
+	returns = true,
+	fast = true,
+	freezeCam = true,
+	toolNames = { "Cleaning tool" },
+	target = nil,
+	guardHum = nil,
+}
+
+local function getTrashFolder()
+	return findPath(Workspace, "Map", "Trash", "CurrentTrash")
+end
+
+local function trashPromptValid(prompt, folder)
+	return prompt and prompt.Parent and prompt:IsDescendantOf(folder) and prompt.Enabled
+end
+
+local TrashCache = { folder = nil, prompts = {}, conns = {} }
+
+function TrashCache.reset()
+	for _, conn in ipairs(TrashCache.conns) do
+		conn:Disconnect()
+	end
+	table.clear(TrashCache.conns)
+	table.clear(TrashCache.prompts)
+	TrashCache.folder = nil
+end
+
+function TrashCache.sync(folder)
+	if TrashCache.folder == folder then
+		return
+	end
+	TrashCache.reset()
+	if not folder then
+		return
+	end
+	TrashCache.folder = folder
+	for _, inst in ipairs(folder:GetDescendants()) do
+		if inst.Name == "CleanPrompt" and inst:IsA("ProximityPrompt") then
+			TrashCache.prompts[inst] = true
+		end
+	end
+	table.insert(TrashCache.conns, folder.DescendantAdded:Connect(function(inst)
+		if inst.Name == "CleanPrompt" and inst:IsA("ProximityPrompt") then
+			TrashCache.prompts[inst] = true
+		end
+	end))
+	table.insert(TrashCache.conns, folder.DescendantRemoving:Connect(function(inst)
+		TrashCache.prompts[inst] = nil
+	end))
+end
+
+function TrashCache.position(prompt)
+	local parent = prompt.Parent
+	if parent then
+		if parent:IsA("BasePart") then
+			return parent.Position
+		end
+		if parent:IsA("Attachment") then
+			return parent.WorldPosition
+		end
+	end
+	local cf = getCFrame(prompt)
+	return cf and cf.Position
+end
+
+table.insert(CleanupFns, TrashCache.reset)
+
+local function findTrashPrompt()
+	local folder = getTrashFolder()
+	TrashCache.sync(folder)
+	if not folder then
+		return nil
+	end
+	if trashPromptValid(TrashJob.target, folder) then
+		return TrashJob.target
+	end
+	local root = getRoot()
+	local origin = root and root.Position or Vector3.zero
+	local best, bestDistance = nil, math.huge
+	for prompt in pairs(TrashCache.prompts) do
+		if prompt.Parent and prompt.Enabled then
+			local position = TrashCache.position(prompt)
+			if position then
+				local distance = (position - origin).Magnitude
+				if distance < bestDistance then
+					best = prompt
+					bestDistance = distance
+				end
+			end
+		end
+	end
+	TrashJob.target = best
+	return best
+end
+
+function TrashJob.wants()
+	return findTrashPrompt() ~= nil
+end
+
+function TrashJob.step()
+	local prompt = findTrashPrompt()
+	if not prompt then
+		return
+	end
+	applyTripGuard(TrashJob)
+	teleportTo(getCFrame(prompt))
+	local times = ownsJobTool(TrashJob) and 5 or 20
+	if prompt.HoldDuration ~= 0 then
+		prompt.HoldDuration = 0
+	end
+	for _ = 1, times do
+		firePrompt(prompt)
+	end
+	local fired = times
+	local root = getRoot()
+	if not root then
+		return
+	end
+	local here = root.Position
+	for other in pairs(TrashCache.prompts) do
+		if fired + times > 100 then
+			break
+		end
+		if other ~= prompt and other.Parent and other.Enabled then
+			local position = TrashCache.position(other)
+			if position and (position - here).Magnitude <= other.MaxActivationDistance * 0.9 then
+				if other.HoldDuration ~= 0 then
+					other.HoldDuration = 0
+				end
+				for _ = 1, times do
+					firePrompt(other)
+				end
+				fired += times
+			end
+		end
+	end
+end
+
+function TrashJob.idle()
+	if TrashCache.folder then
+		TrashCache.reset()
+	end
+end
+
+function TrashJob.onFinish()
+	TrashJob.target = nil
+	releaseTripGuard(TrashJob)
+end
+
+Jobs[1] = EscapeJob
+Jobs[2] = GeneratorJob
+Jobs[3] = MusicBoxJob
+Jobs[4] = TrashJob
+
+local Money = {
+	enabled = false,
+	draining = false,
+	conn = nil,
+	balls = {},
+	half = {},
+	folder = nil,
+	addConn = nil,
+	removeConn = nil,
+	halves = {},
+	lastResolve = 0,
+	deadline = 0,
+}
+
+local function unbindBalls()
+	if Money.addConn then
+		Money.addConn:Disconnect()
+		Money.addConn = nil
+	end
+	if Money.removeConn then
+		Money.removeConn:Disconnect()
+		Money.removeConn = nil
+	end
+	Money.folder = nil
+	table.clear(Money.balls)
+	table.clear(Money.half)
+end
+
+local function bindBalls(folder)
+	unbindBalls()
+	Money.folder = folder
+	if not folder then
+		return
+	end
+	local function consider(inst)
+		if inst.Name == "BaseBall" and inst.ClassName == "Part" then
+			Money.balls[inst] = true
+		end
+	end
+	Money.addConn = folder.DescendantAdded:Connect(consider)
+	Money.removeConn = folder.DescendantRemoving:Connect(function(inst)
+		Money.balls[inst] = nil
+		Money.half[inst] = nil
+	end)
+	for _, descendant in ipairs(folder:GetDescendants()) do
+		consider(descendant)
+	end
+end
+
+local function moneyHalt()
+	if Money.conn then
+		Money.conn:Disconnect()
+		Money.conn = nil
+	end
+	Money.draining = false
+	unbindBalls()
+end
+
+local function moneyStep()
+	local now = os.clock()
+	if now - Money.lastResolve > 1 then
+		Money.lastResolve = now
+		local folder = findPath(Workspace, "Shop", "FunMachine", "Balls")
+		if folder ~= Money.folder then
+			bindBalls(folder)
+		end
+		local zones = findPath(Workspace, "Shop", "FunMachine", "Zones")
+		Money.halves = {}
+		if zones then
+			for _, zone in ipairs(zones:GetChildren()) do
+				if zone.Name == "Half Good" then
+					table.insert(Money.halves, zone)
+				end
+			end
+		end
+	end
+	local pending = false
+	for ball in pairs(Money.balls) do
+		if ball.Parent and ownsPart(ball) then
+			local zone = nil
+			if #Money.halves > 0 then
+				local assigned = Money.half[ball]
+				if not assigned or not assigned.Parent then
+					assigned = Money.halves[math.random(#Money.halves)]
+					Money.half[ball] = assigned
+				end
+				zone = assigned
+			end
+			if zone then
+				local cf = getCFrame(zone)
+				if cf and (ball.Position - cf.Position).Magnitude > 1.5 then
+					pending = true
+					ball.CFrame = cf
+					ball.AssemblyLinearVelocity = Vector3.zero
+					ball.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+		end
+	end
+	if not Money.enabled and (not pending or os.clock() > Money.deadline) then
+		moneyHalt()
+	end
+end
+
+local function moneySet(value)
+	if value then
+		Money.enabled = true
+		Money.draining = false
+		boostSimulation()
+		if not Money.conn then
+			Money.lastResolve = 0
+			Money.conn = RunService.Heartbeat:Connect(moneyStep)
+		end
+	else
+		Money.enabled = false
+		if Money.conn then
+			Money.draining = true
+			Money.deadline = os.clock() + 10
+		end
+	end
+end
+
+local Instant = {
+	on = false,
+	orig = setmetatable({}, { __mode = "k" }),
+	conn = nil,
+	token = 0,
+}
+
+local function applyInstantPrompt(inst)
+	if inst:IsA("ProximityPrompt") and Instant.orig[inst] == nil then
+		Instant.orig[inst] = inst.HoldDuration
+		if inst.HoldDuration ~= 0 then
+			inst.HoldDuration = 0
+		end
+	end
+end
+
+local function instantSet(value)
+	Instant.token += 1
+	local token = Instant.token
+	if Instant.conn then
+		Instant.conn:Disconnect()
+		Instant.conn = nil
+	end
+	if value then
+		Instant.on = true
+		Instant.conn = Workspace.DescendantAdded:Connect(applyInstantPrompt)
+		task.spawn(function()
+			local sliceStart = os.clock()
+			for _, descendant in ipairs(Workspace:GetDescendants()) do
+				if Instant.token ~= token then
+					return
+				end
+				applyInstantPrompt(descendant)
+				if os.clock() - sliceStart > 0.004 then
+					task.wait()
+					sliceStart = os.clock()
+				end
+			end
+		end)
+	else
+		Instant.on = false
+		for prompt, hold in pairs(Instant.orig) do
+			if prompt.Parent then
+				prompt.HoldDuration = hold
+			end
+		end
+		table.clear(Instant.orig)
+	end
+end
+
+local God = { on = false, hooked = false }
+
+local function installGodHook()
+	if God.hooked then
+		return true
+	end
+	local hook = Env.hookmetamethod
+	local getMethod = Env.getnamecallmethod
+	if not hook or not getMethod then
+		return false
+	end
+	local old
+	local function handler(self, ...)
+		if God.on and getMethod() == "FireServer" and typeof(self) == "Instance" and self.Name == "AttackEvent" then
+			local folder = Workspace:FindFirstChild("Animatronics")
+			if folder and self:IsDescendantOf(folder) then
+				return nil
+			end
+		end
+		return old(self, ...)
+	end
+	local wrapped = Env.newcclosure and Env.newcclosure(handler) or handler
+	local ok, result = pcall(hook, game, "__namecall", wrapped)
+	if not ok or not result then
+		return false
+	end
+	old = result
+	God.hooked = true
+	return true
+end
+
+local Intermission = { on = false, last = 0 }
+
+local function intermissionSet(value)
+	Intermission.on = value
+	if not value then
+		return
+	end
+	task.spawn(function()
+		while Intermission.on do
+			local gui = PlayerGui:FindFirstChild("IntermissionSkipGui")
+			local container = gui and gui:FindFirstChild("Container")
+			if container and isGuiVisible(container) and os.clock() - Intermission.last > 0.5 then
+				Intermission.last = os.clock()
+				local remote = findPath(ReplicatedStorage, "Events", "SkipIntermission")
+				if remote then
+					pcall(function()
+						remote:FireServer()
+					end)
+				end
+			end
+			task.wait(0.25)
+		end
+	end)
+end
+
+local Banana = {
+	on = false,
+	users = 0,
+	set = {},
+	owned = {},
+	stamp = setmetatable({}, { __mode = "k" }),
+	ownConn = nil,
+	slot = {},
+	counter = 0,
+	conn = nil,
+	removeConn = nil,
+	token = 0,
+	scanToken = 0,
+	cursor = 0,
+	perCycle = 5,
+	maxChecks = 40,
+}
+
+local Fling = {
+	on = false,
+	set = {},
+	amount = 10,
+	token = 0,
+	index = 0,
+	lastSwitch = 0,
+	lastFill = 0,
+}
+
+local Tornado = {
+	on = false,
+	conn = nil,
+	members = {},
+	list = {},
+	dirty = false,
+	reserved = {},
+	reservedSet = {},
+	pool = {},
+	poolTime = 0,
+	cursor = 0,
+	moveCursor = 0,
+	lastBoost = 0,
+}
+
+local function insideCharacter(inst)
+	if inst:IsA("Model") and inst:FindFirstChildOfClass("Humanoid") then
+		return true
+	end
+	local ancestor = inst.Parent
+	while ancestor and ancestor ~= Workspace do
+		if ancestor:IsA("Tool") or (ancestor:IsA("Model") and ancestor:FindFirstChildOfClass("Humanoid")) then
+			return true
+		end
+		ancestor = ancestor.Parent
+	end
+	return false
+end
+
+local function considerBanana(inst)
+	if not (inst:IsA("BasePart") or inst:IsA("Model")) then
+		return
+	end
+	if not inst.Name:lower():find("peel", 1, true) then
+		return
+	end
+	if inst.Parent and Banana.set[inst.Parent] then
+		return
+	end
+	if insideCharacter(inst) then
+		return
+	end
+	Banana.set[inst] = true
+end
+
+local function bananaOwnStep()
+	local started = os.clock()
+	local checks = 0
+	for inst in pairs(Banana.set) do
+		if not inst.Parent then
+			Banana.set[inst] = nil
+			Banana.owned[inst] = nil
+			Banana.slot[inst] = nil
+			Banana.stamp[inst] = nil
+		else
+			local last = Banana.stamp[inst]
+			if not last or started - last >= 1.5 then
+				if checks >= 15 or os.clock() - started > 0.002 then
+					break
+				end
+				checks += 1
+				Banana.stamp[inst] = started
+				local part = inst:IsA("BasePart") and inst or getRootPart(inst)
+				if part and ownsPart(part) then
+					Banana.owned[inst] = true
+				else
+					Banana.owned[inst] = nil
+				end
+			end
+		end
+	end
+end
+
+local function bananaTrack(on)
+	if on then
+		Banana.users += 1
+		if Banana.users > 1 then
+			return
+		end
+		Banana.scanToken += 1
+		local token = Banana.scanToken
+		Banana.conn = Workspace.DescendantAdded:Connect(considerBanana)
+		Banana.removeConn = Workspace.DescendantRemoving:Connect(function(inst)
+			Banana.set[inst] = nil
+			Banana.owned[inst] = nil
+			Banana.stamp[inst] = nil
+			Banana.slot[inst] = nil
+			Fling.set[inst] = nil
+		end)
+		Banana.ownConn = RunService.Heartbeat:Connect(bananaOwnStep)
+		task.spawn(function()
+			local sliceStart = os.clock()
+			for _, descendant in ipairs(Workspace:GetDescendants()) do
+				if Banana.scanToken ~= token then
+					return
+				end
+				considerBanana(descendant)
+				if os.clock() - sliceStart > 0.004 then
+					task.wait()
+					sliceStart = os.clock()
+				end
+			end
+		end)
+	else
+		Banana.users = math.max(0, Banana.users - 1)
+		if Banana.users > 0 then
+			return
+		end
+		Banana.scanToken += 1
+		if Banana.conn then
+			Banana.conn:Disconnect()
+			Banana.conn = nil
+		end
+		if Banana.removeConn then
+			Banana.removeConn:Disconnect()
+			Banana.removeConn = nil
+		end
+		if Banana.ownConn then
+			Banana.ownConn:Disconnect()
+			Banana.ownConn = nil
+		end
+		table.clear(Banana.set)
+		table.clear(Banana.owned)
+		table.clear(Banana.stamp)
+		table.clear(Banana.slot)
+	end
+end
+
+bananaTrack(true)
+table.insert(CleanupFns, function()
+	bananaTrack(false)
+end)
+
+local function buildBananaTargets()
+	local list = {}
+	local folder = Workspace:FindFirstChild("Animatronics")
+	if folder then
+		local names = {}
+		for name in pairs(Selected.animatronics) do
+			table.insert(names, name)
+		end
+		table.sort(names)
+		for _, name in ipairs(names) do
+			local model = folder:FindFirstChild(name)
+			if model and model:GetAttribute("AnimatronicEnabled") == true then
+				local part = getRootPart(model)
+				if part then
+					table.insert(list, part)
+				end
+			end
+		end
+	end
+	do
+		local names = {}
+		for name in pairs(Selected.players) do
+			table.insert(names, name)
+		end
+		table.sort(names)
+		for _, name in ipairs(names) do
+			local plr = Players:FindFirstChild(name)
+			local char = plr and plr ~= LocalPlayer and plr.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if hum and hum.Health > 0 and root then
+				table.insert(list, root)
+			end
+		end
+	end
+	return list
+end
+
+local function bananaTick()
+	local targets = buildBananaTargets()
+	local count = #targets
+	if count == 0 then
+		return
+	end
+	local list = {}
+	if Tornado.on then
+		for _, inst in ipairs(Tornado.reserved) do
+			if inst.Parent and not Fling.set[inst] then
+				table.insert(list, inst)
+			end
+		end
+	else
+		for inst in pairs(Banana.owned) do
+			if inst.Parent and not Fling.set[inst] then
+				table.insert(list, inst)
+			end
+		end
+	end
+	local total = #list
+	if total == 0 then
+		return
+	end
+	local moved = 0
+	local checked = 0
+	local limit = math.min(total, math.max(Banana.maxChecks, Banana.perCycle * 4))
+	while moved < Banana.perCycle and checked < limit do
+		Banana.cursor = (Banana.cursor % total) + 1
+		checked += 1
+		local inst = list[Banana.cursor]
+		local part = inst:IsA("BasePart") and inst or getRootPart(inst)
+		if part and Banana.owned[inst] then
+			local slot = Banana.slot[inst]
+			if not slot then
+				Banana.counter += 1
+				slot = Banana.counter
+			end
+			Banana.slot[inst] = slot + 1
+			local cf = targets[(slot % count) + 1].CFrame
+			if inst:IsA("Model") then
+				inst:PivotTo(cf)
+			else
+				inst.CFrame = cf
+			end
+			part.AssemblyLinearVelocity = Vector3.zero
+			moved += 1
+		end
+	end
+end
+
+local function bananaSet(value)
+	if value == Banana.on then
+		return
+	end
+	Banana.token += 1
+	local token = Banana.token
+	Banana.on = value
+	if not value then
+		bananaTrack(false)
+		return
+	end
+	bananaTrack(true)
+	task.spawn(function()
+		local lastBoost = 0
+		while Banana.token == token do
+			if os.clock() - lastBoost > 2 then
+				lastBoost = os.clock()
+				boostSimulation()
+			end
+			pcall(bananaTick)
+			task.wait(0.15)
+		end
+	end)
+end
+
+local function flingStep()
+	local targets = buildBananaTargets()
+	local count = #targets
+	if count == 0 then
+		return
+	end
+	local active = 0
+	for banana in pairs(Fling.set) do
+		local part = banana:IsA("BasePart") and banana or getRootPart(banana)
+		if not banana.Parent or not part or not Banana.owned[banana] then
+			Fling.set[banana] = nil
+		else
+			active += 1
+		end
+	end
+	local now = os.clock()
+	if active < Fling.amount and now - Fling.lastFill > 0.25 then
+		Fling.lastFill = now
+		for inst in pairs(Banana.owned) do
+			if active >= Fling.amount then
+				break
+			end
+			if inst.Parent and not Fling.set[inst] then
+				local part = inst:IsA("BasePart") and inst or getRootPart(inst)
+				if part and Banana.owned[inst] then
+					Fling.set[inst] = true
+					active += 1
+				end
+			end
+		end
+	end
+	if active == 0 then
+		return
+	end
+	if now - Fling.lastSwitch > 0.5 then
+		Fling.lastSwitch = now
+		Fling.index += 1
+	end
+	local cf = targets[(Fling.index % count) + 1].CFrame
+	for banana in pairs(Fling.set) do
+		local part = banana:IsA("BasePart") and banana or getRootPart(banana)
+		if part then
+			if banana:IsA("Model") then
+				banana:PivotTo(cf)
+			else
+				banana.CFrame = cf
+			end
+			local push = Vector3.new(math.random(-100, 100), math.random(50, 100), math.random(-100, 100))
+			part.AssemblyLinearVelocity = push.Unit * 100000
+			part.AssemblyAngularVelocity = Vector3.new(10000, 10000, 10000)
+		end
+	end
+end
+
+local function flingSet(value)
+	if value == Fling.on then
+		return
+	end
+	Fling.token += 1
+	local token = Fling.token
+	Fling.on = value
+	if not value then
+		table.clear(Fling.set)
+		bananaTrack(false)
+		return
+	end
+	Fling.index = 0
+	Fling.lastSwitch = 0
+	Fling.lastFill = 0
+	bananaTrack(true)
+	task.spawn(function()
+		local lastBoost = 0
+		while Fling.token == token do
+			if os.clock() - lastBoost > 2 then
+				lastBoost = os.clock()
+				boostSimulation()
+			end
+			pcall(flingStep)
+			task.wait()
+		end
+	end)
+end
+
+function Tornado.balance()
+	local want = Banana.on and Banana.perCycle or 0
+	for i = #Tornado.reserved, 1, -1 do
+		local inst = Tornado.reserved[i]
+		if not inst.Parent or Fling.set[inst] or i > want then
+			Tornado.reservedSet[inst] = nil
+			table.remove(Tornado.reserved, i)
+			if inst.Parent and not Fling.set[inst] then
+				Tornado.members[inst] = true
+				Tornado.dirty = true
+			end
+		end
+	end
+	if #Tornado.reserved < want then
+		for inst in pairs(Tornado.members) do
+			if #Tornado.reserved >= want then
+				break
+			end
+			Tornado.members[inst] = nil
+			Tornado.reservedSet[inst] = true
+			table.insert(Tornado.reserved, inst)
+			Tornado.dirty = true
+		end
+	end
+end
+
+function Tornado.claim()
+	local now = os.clock()
+	if now - Tornado.poolTime > 0.5 then
+		Tornado.poolTime = now
+		table.clear(Tornado.pool)
+		for inst in pairs(Banana.owned) do
+			if inst.Parent then
+				table.insert(Tornado.pool, inst)
+			end
+		end
+	end
+	local total = #Tornado.pool
+	if total == 0 then
+		return
+	end
+	for _ = 1, math.min(total, 30) do
+		Tornado.cursor = (Tornado.cursor % total) + 1
+		local inst = Tornado.pool[Tornado.cursor]
+		if inst.Parent and not Fling.set[inst] and not Tornado.members[inst] and not Tornado.reservedSet[inst] then
+			local part = inst:IsA("BasePart") and inst or getRootPart(inst)
+			if part and Banana.owned[inst] then
+				Tornado.members[inst] = true
+				Tornado.dirty = true
+			end
+		end
+	end
+end
+
+function Tornado.move()
+	local root = getRoot()
+	if not root then
+		return
+	end
+	if Tornado.dirty then
+		Tornado.dirty = false
+		table.clear(Tornado.list)
+		for inst in pairs(Tornado.members) do
+			table.insert(Tornado.list, inst)
+		end
+	end
+	local total = #Tornado.list
+	if total == 0 then
+		return
+	end
+	local base = root.Position
+	local started = os.clock()
+	local index = Tornado.moveCursor
+	local processed = 0
+	while processed < total do
+		index = (index % total) + 1
+		processed += 1
+		local inst = Tornado.list[index]
+		if Tornado.members[inst] then
+			local part = inst:IsA("BasePart") and inst or getRootPart(inst)
+			if not inst.Parent or Fling.set[inst] or not part or not Banana.owned[inst] then
+				Tornado.members[inst] = nil
+				Tornado.dirty = true
+			else
+				local rise = ((index * 0.61803398875) % 1 + started * 0.35) % 1
+				local angle = started * (7 - rise * 3) + index * 2.399963
+				local radius = 14 + rise * 26 + math.sin(started * 3 + index) * 2
+				local height = -2 + rise * 47
+				local position = base + Vector3.new(math.cos(angle) * radius, height, math.sin(angle) * radius)
+				local cf = CFrame.new(position) * CFrame.Angles(started * 5 + index, started * 7, 0)
+				if inst:IsA("Model") then
+					inst:PivotTo(cf)
+				else
+					inst.CFrame = cf
+				end
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+			end
+		end
+		if os.clock() - started > 0.002 then
+			break
+		end
+	end
+	Tornado.moveCursor = index
+end
+
+function Tornado.set(value)
+	if value == Tornado.on then
+		return
+	end
+	Tornado.on = value
+	if value then
+		bananaTrack(true)
+		Tornado.conn = RunService.Heartbeat:Connect(function()
+			if os.clock() - Tornado.lastBoost > 2 then
+				Tornado.lastBoost = os.clock()
+				boostSimulation()
+			end
+			pcall(Tornado.balance)
+			pcall(Tornado.claim)
+			pcall(Tornado.move)
+		end)
+	else
+		if Tornado.conn then
+			Tornado.conn:Disconnect()
+			Tornado.conn = nil
+		end
+		bananaTrack(false)
+		table.clear(Tornado.members)
+		table.clear(Tornado.list)
+		table.clear(Tornado.reserved)
+		table.clear(Tornado.reservedSet)
+		table.clear(Tornado.pool)
+		Tornado.dirty = false
+	end
+end
+
+local function createLock(getEntries)
+	local lock = { entries = {}, conns = {}, on = false }
+	local function track(entry)
+		lock.entries[entry] = { original = entry.inst[entry.prop] }
+		entry.inst[entry.prop] = entry.value
+		table.insert(lock.conns, entry.inst:GetPropertyChangedSignal(entry.prop):Connect(function()
+			if lock.on and entry.inst[entry.prop] ~= entry.value then
+				entry.inst[entry.prop] = entry.value
+			end
+		end))
+	end
+	local seen = {}
+	function lock.refresh()
+		if not lock.on then
+			return
+		end
+		for _, entry in ipairs(getEntries()) do
+			local perInstance = seen[entry.inst]
+			if not perInstance then
+				perInstance = {}
+				seen[entry.inst] = perInstance
+			end
+			if not perInstance[entry.prop] then
+				perInstance[entry.prop] = true
+				track(entry)
+			end
+		end
+	end
+	function lock.set(value)
+		if value then
+			lock.on = true
+			table.insert(lock.conns, Lighting.ChildAdded:Connect(function()
+				task.defer(lock.refresh)
+			end))
+			lock.refresh()
+		else
+			lock.on = false
+			for _, conn in ipairs(lock.conns) do
+				conn:Disconnect()
+			end
+			lock.conns = {}
+			for entry, data in pairs(lock.entries) do
+				if entry.inst.Parent then
+					pcall(function()
+						entry.inst[entry.prop] = data.original
+					end)
+				end
+			end
+			lock.entries = {}
+			seen = {}
+		end
+	end
+	return lock
+end
+
+local FullBright = createLock(function()
+	return {
+		{ inst = Lighting, prop = "Brightness", value = 2 },
+		{ inst = Lighting, prop = "ClockTime", value = 14 },
+		{ inst = Lighting, prop = "GlobalShadows", value = false },
+		{ inst = Lighting, prop = "Ambient", value = Color3.fromRGB(178, 178, 178) },
+		{ inst = Lighting, prop = "OutdoorAmbient", value = Color3.fromRGB(178, 178, 178) },
+	}
+end)
+
+local NoFog = createLock(function()
+	local entries = {
+		{ inst = Lighting, prop = "FogEnd", value = 1e9 },
+		{ inst = Lighting, prop = "FogStart", value = 1e8 },
+	}
+	for _, child in ipairs(Lighting:GetChildren()) do
+		if child:IsA("Atmosphere") then
+			table.insert(entries, { inst = child, prop = "Density", value = 0 })
+			table.insert(entries, { inst = child, prop = "Haze", value = 0 })
+		end
+	end
+	return entries
+end)
+
+local ESP = {
+	players = {},
+	anim = {},
+	playersOn = false,
+	animOn = false,
+	playerConns = {},
+	animWatch = nil,
+}
+
+local function destroyAll(objects)
+	for _, inst in ipairs(objects) do
+		pcall(function()
+			inst:Destroy()
+		end)
+	end
+end
+
+local function disconnectAll(conns)
+	for _, conn in ipairs(conns) do
+		conn:Disconnect()
+	end
+end
+
+local function makeNameBillboard(adornee, parent, text, color)
+	local bb = Instance.new("BillboardGui")
+	bb.Adornee = adornee
+	bb.Size = UDim2.fromOffset(120, 14)
+	bb.StudsOffset = Vector3.new(0, 2.6, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 100000
+	bb.LightInfluence = 0
+	bb.Parent = parent
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = color
+	label.TextSize = 12
+	label.Font = Enum.Font.GothamBold
+	label.TextStrokeTransparency = 0.5
+	label.Parent = bb
+	return bb
+end
+
+local function clearPlayerESP(plr)
+	local data = ESP.players[plr]
+	if not data then
+		return
+	end
+	ESP.players[plr] = nil
+	destroyAll(data.objects)
+	disconnectAll(data.conns)
+end
+
+local function applyPlayerESP(plr, char)
+	local data = ESP.players[plr]
+	if not data then
+		return
+	end
+	destroyAll(data.objects)
+	data.objects = {}
+	data.char = char
+	task.spawn(function()
+		local head = char:WaitForChild("Head", 5)
+		if not head or ESP.players[plr] ~= data or data.char ~= char then
+			return
+		end
+		local highlight = Instance.new("Highlight")
+		highlight.Adornee = char
+		highlight.FillColor = Color3.fromRGB(255, 255, 255)
+		highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+		highlight.FillTransparency = 0.6
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.Parent = char
+		local billboard = makeNameBillboard(head, char, plr.Name, Color3.fromRGB(255, 255, 255))
+		table.insert(data.objects, highlight)
+		table.insert(data.objects, billboard)
+	end)
+end
+
+local function hookPlayerESP(plr)
+	if plr == LocalPlayer or ESP.players[plr] then
+		return
+	end
+	local data = { objects = {}, conns = {}, char = nil }
+	ESP.players[plr] = data
+	table.insert(data.conns, plr.CharacterAdded:Connect(function(char)
+		applyPlayerESP(plr, char)
+	end))
+	if plr.Character then
+		applyPlayerESP(plr, plr.Character)
+	end
+end
+
+local function playersESPSet(value)
+	if value then
+		ESP.playersOn = true
+		for _, plr in ipairs(Players:GetPlayers()) do
+			hookPlayerESP(plr)
+		end
+		table.insert(ESP.playerConns, Players.PlayerAdded:Connect(hookPlayerESP))
+		table.insert(ESP.playerConns, Players.PlayerRemoving:Connect(clearPlayerESP))
+	else
+		ESP.playersOn = false
+		disconnectAll(ESP.playerConns)
+		ESP.playerConns = {}
+		for plr in pairs(ESP.players) do
+			clearPlayerESP(plr)
+		end
+	end
+end
+
+local function clearAnimESP(model)
+	local data = ESP.anim[model]
+	if not data then
+		return
+	end
+	ESP.anim[model] = nil
+	destroyAll(data.objects)
+	disconnectAll(data.conns)
+end
+
+local function hookAnimESP(model)
+	if ESP.anim[model] or not model:IsA("Model") then
+		return
+	end
+	local data = { objects = {}, conns = {}, labeled = false }
+	ESP.anim[model] = data
+	local highlight = Instance.new("Highlight")
+	highlight.Adornee = model
+	highlight.FillTransparency = 0.5
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Parent = model
+	table.insert(data.objects, highlight)
+	local function setColor()
+		local color = model:GetAttribute("AnimatronicEnabled") == true and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+		highlight.FillColor = color
+		highlight.OutlineColor = color
+	end
+	setColor()
+	table.insert(data.conns, model:GetAttributeChangedSignal("AnimatronicEnabled"):Connect(setColor))
+	local function attach()
+		if data.labeled then
+			return true
+		end
+		local part = getRootPart(model)
+		if not part then
+			return false
+		end
+		data.labeled = true
+		table.insert(data.objects, makeNameBillboard(part, model, model.Name, Color3.fromRGB(255, 255, 255)))
+		return true
+	end
+	if not attach() then
+		local conn
+		conn = model.DescendantAdded:Connect(function()
+			if attach() then
+				conn:Disconnect()
+			end
+		end)
+		table.insert(data.conns, conn)
+	end
+end
+
+local function animESPSet(value)
+	if value then
+		ESP.animOn = true
+		ESP.animWatch = watchWorkspaceFolder("Animatronics", hookAnimESP, clearAnimESP)
+	else
+		ESP.animOn = false
+		if ESP.animWatch then
+			ESP.animWatch.Stop()
+			ESP.animWatch = nil
+		end
+		for model in pairs(ESP.anim) do
+			clearAnimESP(model)
+		end
+	end
+end
+
+local SpamActivate = { conn = nil }
+
+local function spamActivateSet(value)
+	if value then
+		if SpamActivate.conn then
+			return
+		end
+		SpamActivate.conn = RunService.RenderStepped:Connect(function()
+			local char = getChar()
+			local tool = char and char:FindFirstChildOfClass("Tool")
+			if tool then
+				pcall(function()
+					tool:Activate()
+				end)
+			end
+		end)
+	elseif SpamActivate.conn then
+		SpamActivate.conn:Disconnect()
+		SpamActivate.conn = nil
+	end
+end
+
+local Spam = {}
+
+local FireTimes = { count = 1 }
+
+local function makeSpam(getPrompt)
+	local state = { conn = nil }
+	function state.start()
+		if state.conn then
+			return
+		end
+		local cached = nil
+		state.conn = RunService.RenderStepped:Connect(function()
+			if not cached or not cached.Parent then
+				cached = getPrompt()
+			end
+			if cached then
+				for _ = 1, FireTimes.count do
+					pcall(Env.fireproximityprompt, cached)
+				end
+			end
+		end)
+	end
+	function state.stop()
+		if state.conn then
+			state.conn:Disconnect()
+			state.conn = nil
+		end
+	end
+	return state
+end
+
+Spam.orb = makeSpam(function()
+	return findPath(Workspace, "Shop", "Stands", "BasicItems", "Orb of shop reset", "ToolHandle", "BoothPrompt")
+end)
+
+Spam.item = makeSpam(function()
+	return findPath(Workspace, "Shop", "Stands", "RandomItemBooth", "ProximityPrompt")
+end)
+
+local SpamTool = {
+	on = false,
+	token = 0,
+	stand = nil,
+	parts = {},
+	prompts = {},
+	attrConns = {},
+	standConns = {},
+	frameConn = nil,
+}
+
+local function spamToolUntrack(part)
+	SpamTool.parts[part] = nil
+	SpamTool.prompts[part] = nil
+	local conn = SpamTool.attrConns[part]
+	if conn then
+		conn:Disconnect()
+		SpamTool.attrConns[part] = nil
+	end
+end
+
+local function spamToolTrack(child)
+	if child.ClassName ~= "Part" or SpamTool.attrConns[child] then
+		return
+	end
+	local function refresh()
+		local value = child:GetAttribute("Discount")
+		if value ~= nil and value ~= false then
+			SpamTool.parts[child] = true
+		else
+			SpamTool.parts[child] = nil
+			SpamTool.prompts[child] = nil
+		end
+	end
+	refresh()
+	SpamTool.attrConns[child] = child:GetAttributeChangedSignal("Discount"):Connect(refresh)
+end
+
+local function spamToolUnbind()
+	for _, conn in ipairs(SpamTool.standConns) do
+		conn:Disconnect()
+	end
+	SpamTool.standConns = {}
+	for part in pairs(SpamTool.attrConns) do
+		spamToolUntrack(part)
+	end
+	table.clear(SpamTool.parts)
+	table.clear(SpamTool.prompts)
+	SpamTool.stand = nil
+end
+
+local function spamToolBind(stand)
+	spamToolUnbind()
+	SpamTool.stand = stand
+	if not stand then
+		return
+	end
+	table.insert(SpamTool.standConns, stand.ChildAdded:Connect(spamToolTrack))
+	table.insert(SpamTool.standConns, stand.ChildRemoved:Connect(spamToolUntrack))
+	for _, child in ipairs(stand:GetChildren()) do
+		spamToolTrack(child)
+	end
+end
+
+local function spamToolFrame()
+	for part in pairs(SpamTool.parts) do
+		local prompt = SpamTool.prompts[part]
+		if not prompt or not prompt.Parent then
+			prompt = findPath(part, "ToolHandle", "BoothPrompt")
+			SpamTool.prompts[part] = prompt
+		end
+		if prompt then
+			for _ = 1, FireTimes.count do
+				pcall(Env.fireproximityprompt, prompt)
+			end
+		end
+	end
+end
+
+local function spamToolSet(value)
+	if value == SpamTool.on then
+		return
+	end
+	SpamTool.token += 1
+	local token = SpamTool.token
+	SpamTool.on = value
+	if not value then
+		if SpamTool.frameConn then
+			SpamTool.frameConn:Disconnect()
+			SpamTool.frameConn = nil
+		end
+		spamToolUnbind()
+		return
+	end
+	spamToolBind(findPath(Workspace, "Shop", "Stands", "RandomItems"))
+	SpamTool.frameConn = RunService.RenderStepped:Connect(spamToolFrame)
+	task.spawn(function()
+		while SpamTool.token == token do
+			local stand = findPath(Workspace, "Shop", "Stands", "RandomItems")
+			if stand ~= SpamTool.stand then
+				spamToolBind(stand)
+			end
+			task.wait(1)
+		end
+	end)
+end
+
+local Finder = {
+	running = false,
+	token = 0,
+	wantDiscount = false,
+	cooldown = 0.6,
+}
+
+local function findOrb()
+	local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+	local orb = backpack and backpack:FindFirstChild("Orb of shop reset")
+	if orb then
+		return orb
+	end
+	local char = getChar()
+	return char and char:FindFirstChild("Orb of shop reset")
+end
+
+local function findInStand(stand)
+	for _, child in ipairs(stand:GetChildren()) do
+		if child.ClassName == "Part" and child.Name == Selected.tool then
+			local discount = child:GetAttribute("Discount")
+			local hasDiscount = discount ~= nil and discount ~= false
+			if hasDiscount == Finder.wantDiscount then
+				return child
+			end
+		end
+	end
+	return nil
+end
+
+local function stopFinder(message)
+	Finder.running = false
+	Finder.token += 1
+	local hum = getHum()
+	if hum then
+		pcall(function()
+			hum:UnequipTools()
+		end)
+	end
+	if message then
+		notify("Shop", message)
+	end
+end
+
+local function runFinder(wantDiscount)
+	if Finder.running then
+		stopFinder("Search stopped.")
+		return
+	end
+	if not Selected.tool then
+		notify("Shop", "Please select a tool first.")
+		return
+	end
+	if not findOrb() then
+		notify("Shop", "You do not have an Orb of shop reset.")
+		return
+	end
+	Finder.running = true
+	Finder.wantDiscount = wantDiscount
+	Finder.token += 1
+	local token = Finder.token
+	task.spawn(function()
+		while Finder.running and Finder.token == token do
+			local stand = findPath(Workspace, "Shop", "Stands", "RandomItems")
+			if not stand then
+				stopFinder("RandomItems stand was not found.")
+				return
+			end
+			if findInStand(stand) then
+				stopFinder("Found: " .. tostring(Selected.tool))
+				return
+			end
+			local orb = findOrb()
+			if not orb then
+				stopFinder("Orb of shop reset is gone. Buy one and try again.")
+				return
+			end
+			local hum = getHum()
+			if orb.Parent ~= getChar() and hum then
+				pcall(function()
+					hum:EquipTool(orb)
+				end)
+			end
+			pcall(function()
+				orb:Activate()
+			end)
+			task.wait(Finder.cooldown)
+		end
+	end)
+end
+
+local COLOR_BG = Color3.fromRGB(14, 9, 38)
+local COLOR_TITLE = Color3.fromRGB(255, 255, 255)
+local COLOR_ROW = Color3.fromRGB(36, 24, 78)
+local COLOR_LIST = Color3.fromRGB(26, 17, 58)
+local COLOR_GREEN = Color3.fromRGB(135, 85, 245)
+local COLOR_OFF = Color3.fromRGB(62, 52, 96)
+local COLOR_BLUE = Color3.fromRGB(45, 135, 225)
+local COLOR_RED = Color3.fromRGB(180, 55, 55)
+local COLOR_TEXT = Color3.fromRGB(255, 255, 255)
+local COLOR_MUTED = Color3.fromRGB(175, 165, 215)
+
+local function makeInst(className, props, parent)
+	local inst = Instance.new(className)
+	for key, value in pairs(props) do
+		inst[key] = value
+	end
+	inst.Parent = parent
+	return inst
+end
+
+local GALAXY_GRADIENT = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 122, 217)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(143, 91, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(63, 201, 255)),
+})
+
+local function addGalaxyGradient(inst)
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = GALAXY_GRADIENT
+	gradient.Parent = inst
+end
+
+local function addCorner(inst, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius or 6)
+	corner.Parent = inst
+end
+
+local WindowGui = makeInst("ScreenGui", {
+	Name = "InfiniteNightsFreddy",
+	ResetOnSpawn = false,
+	IgnoreGuiInset = true,
+	DisplayOrder = 900,
+	Enabled = false,
+}, getGuiParent())
+
+local viewport = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+local WIN_W = math.clamp(viewport.X - 40, 260, 440)
+local WIN_H = math.clamp(viewport.Y - 40, 220, 340)
+
+local WindowFrame = makeInst("Frame", {
+	Name = "Window",
+	Size = UDim2.fromOffset(WIN_W, WIN_H),
+	Position = UDim2.fromOffset((viewport.X - WIN_W) / 2, (viewport.Y - WIN_H) / 2),
+	BackgroundColor3 = COLOR_BG,
+	BorderSizePixel = 0,
+	Active = true,
+}, WindowGui)
+addCorner(WindowFrame, 10)
+
+local STAR_POSITIONS = {
+	{ 0.06, 0.12 }, { 0.14, 0.82 }, { 0.22, 0.3 }, { 0.31, 0.92 }, { 0.38, 0.08 },
+	{ 0.47, 0.6 }, { 0.55, 0.95 }, { 0.62, 0.18 }, { 0.7, 0.75 }, { 0.78, 0.38 },
+	{ 0.85, 0.9 }, { 0.92, 0.22 }, { 0.96, 0.66 }, { 0.03, 0.55 },
+}
+for _, pos in ipairs(STAR_POSITIONS) do
+	makeInst("Frame", {
+		Size = UDim2.fromOffset(2, 2),
+		Position = UDim2.fromScale(pos[1], pos[2]),
+		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+		BackgroundTransparency = 0.35,
+		BorderSizePixel = 0,
+	}, WindowFrame)
+end
+
+local TitleBar = makeInst("Frame", {
+	Name = "TitleBar",
+	Size = UDim2.new(1, 0, 0, 32),
+	BackgroundColor3 = COLOR_TITLE,
+	BorderSizePixel = 0,
+}, WindowFrame)
+addCorner(TitleBar, 10)
+addGalaxyGradient(TitleBar)
+
+makeInst("UITextSizeConstraint", { MaxTextSize = 15, MinTextSize = 9 }, makeInst("TextLabel", {
+	Size = UDim2.new(1, -50, 1, 0),
+	Position = UDim2.fromOffset(10, 0),
+	BackgroundTransparency = 1,
+	Text = "Nytix (Infinite Nights With Freddy)",
+	TextColor3 = COLOR_TEXT,
+	Font = Enum.Font.GothamBold,
+	TextSize = 15,
+	TextScaled = true,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+}, TitleBar))
+
+local CloseButton = makeInst("TextButton", {
+	Size = UDim2.fromOffset(28, 22),
+	Position = UDim2.new(1, -34, 0.5, -11),
+	BackgroundColor3 = COLOR_RED,
+	Text = "X",
+	TextColor3 = COLOR_TEXT,
+	Font = Enum.Font.GothamBold,
+	TextSize = 14,
+	AutoButtonColor = false,
+	BorderSizePixel = 0,
+}, TitleBar)
+addCorner(CloseButton, 6)
+CloseButton.MouseButton1Click:Connect(function()
+	WindowGui.Enabled = false
+end)
+
+local TabBar = makeInst("Frame", {
+	Size = UDim2.new(1, -12, 0, 28),
+	Position = UDim2.fromOffset(6, 36),
+	BackgroundTransparency = 1,
+}, WindowFrame)
+
+local Pages = makeInst("Frame", {
+	Size = UDim2.new(1, -12, 1, -72),
+	Position = UDim2.fromOffset(6, 68),
+	BackgroundTransparency = 1,
+	ClipsDescendants = true,
+}, WindowFrame)
+
+local TabOrder = { "Main", "Player", "Teleport", "Troll", "Misc", "Shop", "Info Viewer" }
+local Tabs = {}
+
+local function showTab(name)
+	for tabName, tab in pairs(Tabs) do
+		local selected = tabName == name
+		tab.page.Visible = selected
+		tab.button.BackgroundColor3 = selected and COLOR_BLUE or COLOR_ROW
+	end
+end
+
+for index, name in ipairs(TabOrder) do
+	local tabWidth = 1 / #TabOrder
+	local button = makeInst("TextButton", {
+		Size = UDim2.new(tabWidth, -4, 1, 0),
+		Position = UDim2.new((index - 1) * tabWidth, 2, 0, 0),
+		BackgroundColor3 = COLOR_ROW,
+		Text = name,
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextScaled = true,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, TabBar)
+	addCorner(button, 6)
+	makeInst("UITextSizeConstraint", { MaxTextSize = 14, MinTextSize = 8 }, button)
+	makeInst("UIPadding", { PaddingLeft = UDim.new(0, 3), PaddingRight = UDim.new(0, 3) }, button)
+	local page = makeInst("ScrollingFrame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 4,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		Visible = false,
+	}, Pages)
+	makeInst("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, page)
+	makeInst("UIPadding", { PaddingRight = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6) }, page)
+	Tabs[name] = { button = button, page = page, count = 0 }
+	button.MouseButton1Click:Connect(function()
+		showTab(name)
+	end)
+end
+
+local function nextOrder(tabName)
+	local tab = Tabs[tabName]
+	tab.count += 1
+	return tab.count
+end
+
+local function addToggle(tabName, text, callback)
+	local row = makeInst("Frame", {
+		Size = UDim2.new(1, 0, 0, 34),
+		BackgroundColor3 = COLOR_ROW,
+		BorderSizePixel = 0,
+		LayoutOrder = nextOrder(tabName),
+	}, Tabs[tabName].page)
+	addCorner(row, 6)
+	makeInst("TextLabel", {
+		Size = UDim2.new(1, -74, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
+		BackgroundTransparency = 1,
+		Text = text,
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.Gotham,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	}, row)
+	local switch = makeInst("TextButton", {
+		Size = UDim2.fromOffset(52, 22),
+		Position = UDim2.new(1, -60, 0.5, -11),
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, row)
+	addCorner(switch, 11)
+	local object = { value = false }
+	local function render()
+		switch.Text = object.value and "ON" or "OFF"
+		switch.BackgroundColor3 = object.value and COLOR_GREEN or COLOR_OFF
+	end
+	function object.Set(value, silent)
+		object.value = value
+		render()
+		if not silent then
+			callback(value)
+		end
+	end
+	switch.MouseButton1Click:Connect(function()
+		object.Set(not object.value)
+	end)
+	render()
+	return object
+end
+
+local function addButton(tabName, text, callback, disabled)
+	local button = makeInst("TextButton", {
+		Size = UDim2.new(1, 0, 0, 34),
+		BackgroundColor3 = disabled and COLOR_OFF or COLOR_BLUE,
+		Text = disabled and (text .. " (Disabled)") or text,
+		TextColor3 = disabled and COLOR_MUTED or COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		LayoutOrder = nextOrder(tabName),
+	}, Tabs[tabName].page)
+	addCorner(button, 6)
+	button.MouseButton1Click:Connect(callback)
+	return button
+end
+
+local function addNote(tabName, text)
+	return makeInst("TextLabel", {
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		Text = text,
+		TextColor3 = COLOR_MUTED,
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		LayoutOrder = nextOrder(tabName),
+	}, Tabs[tabName].page)
+end
+
+local function addTextBox(tabName, text, default, onCommit)
+	local row = makeInst("Frame", {
+		Size = UDim2.new(1, 0, 0, 34),
+		BackgroundColor3 = COLOR_ROW,
+		BorderSizePixel = 0,
+		LayoutOrder = nextOrder(tabName),
+	}, Tabs[tabName].page)
+	addCorner(row, 6)
+	makeInst("TextLabel", {
+		Size = UDim2.new(0.5, -10, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
+		BackgroundTransparency = 1,
+		Text = text,
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.Gotham,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	}, row)
+	local box = makeInst("TextBox", {
+		Size = UDim2.new(0.5, -16, 0, 24),
+		Position = UDim2.new(0.5, 6, 0.5, -12),
+		BackgroundColor3 = COLOR_LIST,
+		Text = default,
+		PlaceholderText = text,
+		PlaceholderColor3 = COLOR_MUTED,
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		ClearTextOnFocus = false,
+		BorderSizePixel = 0,
+	}, row)
+	addCorner(box, 5)
+	makeInst("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, box)
+	box.FocusLost:Connect(function()
+		local shown = onCommit(box.Text)
+		if shown ~= nil then
+			box.Text = shown
+		end
+	end)
+	return box
+end
+
+local function listOtherPlayers()
+	local entries = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local label = plr.Name
+			if plr.DisplayName ~= plr.Name then
+				label = plr.DisplayName .. " (@" .. plr.Name .. ")"
+			end
+			table.insert(entries, { name = plr.Name, label = label })
+		end
+	end
+	table.sort(entries, function(a, b)
+		return a.label:lower() < b.label:lower()
+	end)
+	local options = {}
+	local labels = {}
+	for _, entry in ipairs(entries) do
+		table.insert(options, entry.name)
+		labels[entry.name] = entry.label
+	end
+	return options, labels
+end
+
+local function addDropdown(tabName, config)
+	local holder = makeInst("Frame", {
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		LayoutOrder = nextOrder(tabName),
+	}, Tabs[tabName].page)
+	makeInst("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, holder)
+	local header = makeInst("TextButton", {
+		Size = UDim2.new(1, 0, 0, 34),
+		BackgroundColor3 = COLOR_ROW,
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.Gotham,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		LayoutOrder = 1,
+	}, holder)
+	addCorner(header, 6)
+	makeInst("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, header)
+	local list = makeInst("ScrollingFrame", {
+		Size = UDim2.new(1, 0, 0, 0),
+		BackgroundColor3 = COLOR_LIST,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 4,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		Visible = false,
+		LayoutOrder = 2,
+	}, holder)
+	addCorner(list, 6)
+	makeInst("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder }, list)
+	makeInst("UIPadding", {
+		PaddingTop = UDim.new(0, 4),
+		PaddingBottom = UDim.new(0, 4),
+		PaddingLeft = UDim.new(0, 4),
+		PaddingRight = UDim.new(0, 8),
+	}, list)
+	local object = { selected = config.selected or {}, options = {}, labels = {}, open = false, query = "", allMode = false }
+	local function labelOf(name)
+		return object.labels[name] or name
+	end
+	local function summary()
+		local names = {}
+		for name in pairs(object.selected) do
+			table.insert(names, labelOf(name))
+		end
+		table.sort(names, function(a, b)
+			return a:lower() < b:lower()
+		end)
+		if config.multi then
+			if #names == 0 then
+				return config.name .. (object.allMode and ": Select All" or ": None")
+			end
+			return config.name .. ": " .. table.concat(names, ", ")
+		end
+		return names[1] or config.placeholder
+	end
+	local function renderHeader()
+		header.Text = summary() .. (object.open and "   ^" or "   v")
+	end
+	local function notifyChange()
+		if config.onChange then
+			config.onChange(object.selected)
+		end
+	end
+	local searchBox = makeInst("TextBox", {
+		Size = UDim2.new(1, 0, 0, 28),
+		BackgroundColor3 = COLOR_ROW,
+		Text = "",
+		PlaceholderText = "Search...",
+		PlaceholderColor3 = COLOR_MUTED,
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = true,
+		BorderSizePixel = 0,
+		LayoutOrder = 0,
+	}, list)
+	addCorner(searchBox, 5)
+	makeInst("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, searchBox)
+	local function fillAll()
+		table.clear(object.selected)
+		for _, name in ipairs(object.options) do
+			object.selected[name] = true
+		end
+	end
+	local function rebuild()
+		for _, child in ipairs(list:GetChildren()) do
+			if child:IsA("TextButton") or child:IsA("TextLabel") then
+				child:Destroy()
+			end
+		end
+		local visible = {}
+		for _, name in ipairs(object.options) do
+			if object.query == "" or labelOf(name):lower():find(object.query, 1, true) or name:lower():find(object.query, 1, true) then
+				table.insert(visible, name)
+			end
+		end
+		if config.selectAll then
+			local allButton = makeInst("TextButton", {
+				Size = UDim2.new(1, 0, 0, 28),
+				BackgroundColor3 = object.allMode and COLOR_BLUE or COLOR_ROW,
+				Text = "Select All",
+				TextColor3 = COLOR_TEXT,
+				Font = Enum.Font.GothamBold,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				AutoButtonColor = false,
+				BorderSizePixel = 0,
+				LayoutOrder = 1,
+			}, list)
+			addCorner(allButton, 5)
+			makeInst("UIPadding", { PaddingLeft = UDim.new(0, 8) }, allButton)
+			allButton.MouseButton1Click:Connect(function()
+				if object.allMode then
+					object.allMode = false
+					table.clear(object.selected)
+				else
+					object.allMode = true
+					fillAll()
+				end
+				rebuild()
+				renderHeader()
+				notifyChange()
+			end)
+		end
+		if #visible == 0 then
+			makeInst("TextLabel", {
+				Size = UDim2.new(1, 0, 0, 28),
+				BackgroundTransparency = 1,
+				Text = #object.options == 0 and (config.emptyText or "Nothing found") or "No items found",
+				TextColor3 = COLOR_MUTED,
+				Font = Enum.Font.Gotham,
+				TextSize = 13,
+				LayoutOrder = 2,
+			}, list)
+		end
+		for index, name in ipairs(visible) do
+			local picked = not object.allMode and object.selected[name] == true
+			local optionButton = makeInst("TextButton", {
+				Size = UDim2.new(1, 0, 0, 28),
+				BackgroundColor3 = picked and COLOR_BLUE or COLOR_ROW,
+				Text = labelOf(name),
+				TextColor3 = COLOR_TEXT,
+				Font = Enum.Font.Gotham,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				AutoButtonColor = false,
+				BorderSizePixel = 0,
+				LayoutOrder = index + 2,
+			}, list)
+			addCorner(optionButton, 5)
+			makeInst("UIPadding", { PaddingLeft = UDim.new(0, 8) }, optionButton)
+			optionButton.MouseButton1Click:Connect(function()
+				if config.multi then
+					if object.allMode then
+						object.allMode = false
+						table.clear(object.selected)
+						object.selected[name] = true
+					elseif object.selected[name] then
+						object.selected[name] = nil
+					else
+						object.selected[name] = true
+					end
+				else
+					table.clear(object.selected)
+					object.selected[name] = true
+					object.open = false
+					list.Visible = false
+				end
+				rebuild()
+				renderHeader()
+				notifyChange()
+			end)
+		end
+		local count = math.max(1, #visible) + (config.selectAll and 1 or 0)
+		local rows = math.min(count, 5)
+		list.Size = UDim2.new(1, 0, 0, rows * 31 + 8 + 31)
+	end
+	searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		object.query = searchBox.Text:lower()
+		rebuild()
+	end)
+	function object.SetOptions(options, labels)
+		object.options = options
+		object.labels = labels or {}
+		local optionSet = {}
+		for _, name in ipairs(options) do
+			optionSet[name] = true
+		end
+		local changed = false
+		if object.allMode then
+			for _, name in ipairs(options) do
+				if not object.selected[name] then
+					changed = true
+				end
+			end
+			for name in pairs(object.selected) do
+				if not optionSet[name] then
+					changed = true
+				end
+			end
+			fillAll()
+		else
+			for name in pairs(object.selected) do
+				if not optionSet[name] then
+					object.selected[name] = nil
+					changed = true
+				end
+			end
+		end
+		rebuild()
+		renderHeader()
+		if changed then
+			notifyChange()
+		end
+	end
+	header.MouseButton1Click:Connect(function()
+		object.open = not object.open
+		list.Visible = object.open
+		renderHeader()
+	end)
+	object.SetOptions(config.options or {}, config.labels)
+	return object
+end
+
+local function addInfoRow(tabName, label)
+	local row = makeInst("Frame", {
+		Size = UDim2.new(1, 0, 0, 30),
+		BackgroundColor3 = COLOR_ROW,
+		BorderSizePixel = 0,
+		LayoutOrder = nextOrder(tabName),
+	}, Tabs[tabName].page)
+	addCorner(row, 6)
+	makeInst("TextLabel", {
+		Size = UDim2.new(0.4, -10, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
+		BackgroundTransparency = 1,
+		Text = label,
+		TextColor3 = COLOR_MUTED,
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	}, row)
+	local value = makeInst("TextLabel", {
+		Size = UDim2.new(0.6, -10, 1, 0),
+		Position = UDim2.new(0.4, 0, 0, 0),
+		BackgroundTransparency = 1,
+		Text = "-",
+		TextColor3 = COLOR_TEXT,
+		Font = Enum.Font.GothamBold,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	}, row)
+	return function(text)
+		value.Text = text
+	end
+end
+
+local function addLinesBox(tabName, title)
+	local holder = makeInst("Frame", {
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = COLOR_ROW,
+		BorderSizePixel = 0,
+		LayoutOrder = nextOrder(tabName),
+	}, Tabs[tabName].page)
+	addCorner(holder, 6)
+	makeInst("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }, holder)
+	makeInst("UIPadding", {
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+	}, holder)
+	makeInst("TextLabel", {
+		Size = UDim2.new(1, 0, 0, 20),
+		BackgroundTransparency = 1,
+		Text = title,
+		TextColor3 = COLOR_MUTED,
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		LayoutOrder = 0,
+	}, holder)
+	local box = {}
+	function box.Set(lines, note)
+		for _, child in ipairs(holder:GetChildren()) do
+			if child:IsA("TextLabel") and child.Name == "Line" then
+				child:Destroy()
+			end
+		end
+		for index, text in ipairs(lines) do
+			makeInst("TextLabel", {
+				Name = "Line",
+				Size = UDim2.new(1, 0, 0, 20),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				BackgroundTransparency = 1,
+				Text = text,
+				TextColor3 = COLOR_TEXT,
+				Font = Enum.Font.GothamBold,
+				TextSize = 13,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				LayoutOrder = index,
+			}, holder)
+		end
+		if note then
+			makeInst("TextLabel", {
+				Name = "Line",
+				Size = UDim2.new(1, 0, 0, 20),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				BackgroundTransparency = 1,
+				Text = note,
+				TextColor3 = COLOR_MUTED,
+				Font = Enum.Font.Gotham,
+				TextSize = 12,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				LayoutOrder = #lines + 1,
+			}, holder)
+		end
+	end
+	return box
+end
+
+local function animatronicOptions(folder)
+	local options = {}
+	local seen = {}
+	if folder then
+		for _, child in ipairs(folder:GetChildren()) do
+			if child:IsA("Model") and not seen[child.Name] then
+				seen[child.Name] = true
+				table.insert(options, child.Name)
+			end
+		end
+	end
+	table.sort(options, function(a, b)
+		return a:lower() < b:lower()
+	end)
+	return options
+end
+
+local function itemOptions()
+	local options = {}
+	local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
+	if itemsFolder then
+		for _, item in ipairs(itemsFolder:GetChildren()) do
+			local classItem = item:GetAttribute("ClassItem")
+			local contraband = item:GetAttribute("Contraband")
+			local hidden = (classItem ~= nil and classItem ~= false) or (contraband ~= nil and contraband ~= false)
+			if not hidden then
+				table.insert(options, item.Name)
+			end
+		end
+	end
+	table.sort(options, function(a, b)
+		return a:lower() < b:lower()
+	end)
+	return options
+end
+
+do
+	local songs = {
+		{ "Bad Ending Funk", 135526249310486 },
+		{ "Mirrors Demo Funk", 73295033713326 },
+		{ "Verity Hardtekk", 116704489332329 },
+		{ "My Destiny", 81732137163686 },
+		{ "Westlbrty's Song LOUD", 102643711527064 },
+		{ "Alorns On Danse", 91907999723558 },
+		{ "Verity", 112929059262260 },
+		{ "Deltarune", 138060165466489 },
+		{ "DJ Pigeon Meme Remix", 136167312350215 },
+		{ "Ahh Retro", 71614883873535 },
+	}
+	local songIds = {}
+	local songNames = {}
+	for _, song in ipairs(songs) do
+		songIds[song[1]] = song[2]
+		table.insert(songNames, song[1])
+	end
+	local pickedSong = nil
+
+	addDropdown("Player", {
+		name = "Music",
+		placeholder = "Music",
+		multi = false,
+		options = songNames,
+		emptyText = "No Music",
+		onChange = function(selectedSet)
+			pickedSong = next(selectedSet)
+		end,
+	})
+
+	local musicBusy = false
+	addButton("Player", "Play Music", function()
+		if musicBusy then
+			return
+		end
+		local id = pickedSong and songIds[pickedSong]
+		if not id then
+			notify("Music", "Please select a music first.")
+			return
+		end
+		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+		local radio = findToolIn(getChar(), "radio") or findToolIn(backpack, "radio")
+		if not radio then
+			notify("Music", "Radio was not found.")
+			return
+		end
+		musicBusy = true
+		task.spawn(function()
+			pcall(function()
+				local char = getChar()
+				local hum = getHum()
+				local prev = char and char:FindFirstChildOfClass("Tool")
+				if prev == radio then
+					prev = nil
+				end
+				if hum and radio.Parent ~= char then
+					hum:EquipTool(radio)
+					task.wait(0.15)
+				end
+				local remote = radio:FindFirstChild("Remote")
+				if remote then
+					remote:FireServer("PlaySong", id)
+				else
+					notify("Music", "Radio remote was not found.")
+				end
+				task.wait(0.15)
+				if hum then
+					if prev and prev.Parent then
+						hum:EquipTool(prev)
+					else
+						hum:UnequipTools()
+					end
+				end
+			end)
+			musicBusy = false
+		end)
+	end)
+
+	local Speed = { amount = 16, on = false, conn = nil }
+
+	local function speedSet(value)
+		if value == Speed.on then
+			return
+		end
+		Speed.on = value
+		if value then
+			Speed.conn = RunService.RenderStepped:Connect(function()
+				local hum = getHum()
+				if hum and hum.WalkSpeed ~= Speed.amount then
+					pcall(function()
+						hum.WalkSpeed = Speed.amount
+					end)
+				end
+			end)
+		elseif Speed.conn then
+			Speed.conn:Disconnect()
+			Speed.conn = nil
+		end
+	end
+
+	addTextBox("Player", "Speed", "16", function(text)
+		local value = tonumber(text)
+		if value and value == value and math.abs(value) ~= math.huge then
+			Speed.amount = value
+		end
+		return tostring(Speed.amount)
+	end)
+
+	addToggle("Player", "Change Speed", function(value)
+		speedSet(value)
+	end)
+
+	addToggle("Player", "Spam Activate Tool", function(value)
+		spamActivateSet(value)
+	end)
+
+	table.insert(CleanupFns, function()
+		speedSet(false)
+	end)
+end
+
+do
+	local spots = {
+		{ "Teleport to Shop", "ShopPos" },
+		{ "Teleport to Exit Door", "StartPos" },
+		{ "Teleport to Generator Power Box", "PowerBox" },
+		{ "Teleport to Music Box", "MusicBox" },
+	}
+	for _, entry in ipairs(spots) do
+		addButton("Teleport", entry[1], function()
+			local spot = findPath(Workspace, "Map", "ImportantSpots", entry[2])
+			local cf = spot and getCFrame(spot)
+			if cf then
+				teleportTo(cf)
+			else
+				notify("Teleport", entry[2] .. " was not found.")
+			end
+		end)
+	end
+
+	local Drop = { conn = nil, remote = nil }
+
+	local function dropSet(value)
+		if value then
+			if Drop.conn then
+				return
+			end
+			Drop.conn = RunService.PreSimulation:Connect(function()
+				local char = getChar()
+				if not char or not char:FindFirstChildOfClass("Tool") then
+					return
+				end
+				if not Drop.remote or not Drop.remote.Parent then
+					Drop.remote = findPath(ReplicatedStorage, "Events", "RequestDropItem")
+				end
+				local remote = Drop.remote
+				if remote then
+					pcall(function()
+						remote:FireServer()
+					end)
+				end
+			end)
+		elseif Drop.conn then
+			Drop.conn:Disconnect()
+			Drop.conn = nil
+		end
+	end
+
+	addToggle("Player", "Keep drop item", function(value)
+		dropSet(value)
+	end)
+
+	table.insert(CleanupFns, function()
+		dropSet(false)
+	end)
+end
+
+addToggle("Main", "Instant Prompts", function(value)
+	instantSet(value)
+end)
+
+if Env.hookmetamethod and Env.getnamecallmethod then
+	local godToggle
+	godToggle = addToggle("Player", "God Mode", function(value)
+		if value and not installGodHook() then
+			notify("God Mode", "Hook failed. God Mode is not available.")
+			God.on = false
+			godToggle.Set(false, true)
+			return
+		end
+		God.on = value
+	end)
+end
+
+do
+	local function slapTools()
+		local list = {}
+		local function add(container)
+			if container then
+				for _, child in ipairs(container:GetChildren()) do
+					if child:IsA("Tool") and child.Name:lower():find("slap", 1, true) then
+						table.insert(list, child)
+					end
+				end
+			end
+		end
+		add(LocalPlayer:FindFirstChildOfClass("Backpack"))
+		add(getChar())
+		return list
+	end
+
+	local function autoSlapSet(value)
+		if value == AutoSlap.on then
+			return
+		end
+		AutoSlap.token += 1
+		local token = AutoSlap.token
+		AutoSlap.on = value
+		if not value then
+			return
+		end
+		task.spawn(function()
+			while AutoSlap.token == token do
+				local tools = slapTools()
+				for _, tool in ipairs(tools) do
+					if AutoSlap.token ~= token then
+						break
+					end
+					local hum = getHum()
+					if hum and tool.Parent then
+						if tool.Parent ~= getChar() then
+							pcall(function()
+								hum:EquipTool(tool)
+							end)
+							task.wait()
+						end
+						pcall(function()
+							tool:Activate()
+						end)
+					end
+					task.wait(0.1)
+				end
+				if #tools == 0 then
+					task.wait(0.1)
+				end
+			end
+		end)
+	end
+
+	addToggle("Player", "Auto Slap", function(value)
+		autoSlapSet(value)
+	end)
+
+	table.insert(CleanupFns, function()
+		autoSlapSet(false)
+	end)
+end
+
+do
+	local Hitbox = { on = false, token = 0, part = nil }
+
+	local function removeHitbox()
+		if Hitbox.part then
+			Hitbox.part:Destroy()
+			Hitbox.part = nil
+		end
+	end
+
+	local function ensureHitbox()
+		local root = getRoot()
+		if not root then
+			return
+		end
+		if Hitbox.part and Hitbox.part.Parent == root and Hitbox.part.Adornee == root then
+			return
+		end
+		removeHitbox()
+		local sphere = Instance.new("SphereHandleAdornment")
+		sphere.Name = "FreddyHitbox"
+		sphere.Radius = 2048
+		sphere.Adornee = root
+		sphere.Color3 = Color3.fromRGB(255, 60, 60)
+		sphere.Transparency = 0.85
+		sphere.AlwaysOnTop = true
+		sphere.ZIndex = 1
+		sphere.Parent = root
+		Hitbox.part = sphere
+	end
+
+	local function hitboxSet(value)
+		if value == Hitbox.on then
+			return
+		end
+		Hitbox.token += 1
+		local token = Hitbox.token
+		Hitbox.on = value
+		if not value then
+			removeHitbox()
+			return
+		end
+		task.spawn(function()
+			while Hitbox.token == token do
+				pcall(ensureHitbox)
+				task.wait(0.5)
+			end
+		end)
+	end
+
+	table.insert(CleanupFns, function()
+		hitboxSet(false)
+	end)
+
+	addToggle("Player", "Increase Hitbox", function(value)
+		hitboxSet(value)
+	end)
+end
+
+addToggle("Main", "Auto Skip Intermission", function(value)
+	intermissionSet(value)
+end)
+
+addToggle("Main", "Auto Clean Trash", function(value)
+	setJob(TrashJob, value)
+end)
+
+addToggle("Main", "Auto Fix Generator", function(value)
+	setJob(GeneratorJob, value)
+end)
+
+addToggle("Main", "Auto Escape", function(value)
+	setJob(EscapeJob, value)
+end)
+
+addToggle("Main", "Auto Wind Music Box", function(value)
+	setJob(MusicBoxJob, value)
+end)
+
+addTextBox("Troll", "How Many Banana Peel", "5", function(text)
+	local value = tonumber(text)
+	if value and value == value and math.abs(value) ~= math.huge then
+		value = math.floor(value)
+		if value >= 1 then
+			Banana.perCycle = value
+		end
+	end
+	return tostring(Banana.perCycle)
+end)
+
+local AnimDropdown = addDropdown("Troll", {
+	name = "Animatronics",
+	multi = true,
+	selectAll = true,
+	selected = Selected.animatronics,
+	options = animatronicOptions(Workspace:FindFirstChild("Animatronics")),
+	emptyText = "No Animatronic Found",
+})
+
+local animRefreshPending = false
+local function scheduleAnimRefresh()
+	if animRefreshPending then
+		return
+	end
+	animRefreshPending = true
+	task.delay(0.2, function()
+		animRefreshPending = false
+		AnimDropdown.SetOptions(animatronicOptions(Workspace:FindFirstChild("Animatronics")))
+	end)
+end
+
+local AnimDropdownWatch = watchWorkspaceFolder("Animatronics", scheduleAnimRefresh, scheduleAnimRefresh)
+
+do
+	local refreshPending = false
+
+	local PlayerDropdown = addDropdown("Troll", {
+		name = "Players",
+		multi = true,
+		selectAll = true,
+		selected = Selected.players,
+		options = {},
+		emptyText = "No Player Found",
+	})
+	PlayerDropdown.SetOptions(listOtherPlayers())
+
+	local function scheduleRefresh()
+		if refreshPending then
+			return
+		end
+		refreshPending = true
+		task.delay(0.2, function()
+			refreshPending = false
+			PlayerDropdown.SetOptions(listOtherPlayers())
+		end)
+	end
+
+	local addedConn = Players.PlayerAdded:Connect(scheduleRefresh)
+	local removingConn = Players.PlayerRemoving:Connect(scheduleRefresh)
+	table.insert(CleanupFns, function()
+		addedConn:Disconnect()
+		removingConn:Disconnect()
+	end)
+end
+
+addToggle("Troll", "Abuse Banana Peel", function(value)
+	bananaSet(value)
+end)
+
+addToggle("Troll", "Fling", function(value)
+	flingSet(value)
+end)
+
+addToggle("Misc", "Full Bright", function(value)
+	FullBright.set(value)
+end)
+
+addToggle("Misc", "No Fog", function(value)
+	NoFog.set(value)
+end)
+
+addToggle("Misc", "ESP Players", function(value)
+	playersESPSet(value)
+end)
+
+addToggle("Misc", "ESP Animatronics", function(value)
+	animESPSet(value)
+end)
+
+do
+	local Slushie = { on = false, token = 0, selected = nil, dead = false }
+	local watchConns = {}
+	local refreshPending = false
+
+	local function slushieOptions()
+		local options = {}
+		local seen = {}
+		local folder = findPath(ReplicatedStorage, "Assets", "Slushie", "Swirls")
+		if folder then
+			for _, child in ipairs(folder:GetChildren()) do
+				if child.ClassName == "Part" and not seen[child.Name] then
+					seen[child.Name] = true
+					table.insert(options, child.Name)
+				end
+			end
+		end
+		table.sort(options, function(a, b)
+			return a:lower() < b:lower()
+		end)
+		return options
+	end
+
+	local SlushieDropdown = addDropdown("Shop", {
+		name = "Slushie",
+		placeholder = "Slushie",
+		multi = false,
+		options = slushieOptions(),
+		emptyText = "No Slushie Found",
+		onChange = function(selectedSet)
+			Slushie.selected = next(selectedSet)
+		end,
+	})
+
+	local function refresh()
+		if refreshPending then
+			return
+		end
+		refreshPending = true
+		task.delay(0.2, function()
+			refreshPending = false
+			SlushieDropdown.SetOptions(slushieOptions())
+		end)
+	end
+
+	local function hookFolder(folder)
+		table.insert(watchConns, folder.ChildAdded:Connect(refresh))
+		table.insert(watchConns, folder.ChildRemoved:Connect(refresh))
+	end
+
+	local swirlFolder = findPath(ReplicatedStorage, "Assets", "Slushie", "Swirls")
+	if swirlFolder then
+		hookFolder(swirlFolder)
+	else
+		task.spawn(function()
+			for _ = 1, 40 do
+				task.wait(0.5)
+				if Slushie.dead then
+					return
+				end
+				local found = findPath(ReplicatedStorage, "Assets", "Slushie", "Swirls")
+				if found then
+					hookFolder(found)
+					refresh()
+					return
+				end
+			end
+		end)
+	end
+
+	local function drinkSet(value)
+		if value == Slushie.on then
+			return
+		end
+		Slushie.token += 1
+		local token = Slushie.token
+		Slushie.on = value
+		if not value then
+			return
+		end
+		task.spawn(function()
+			while Slushie.token == token do
+				local name = Slushie.selected
+				if name then
+					for machine = 1, 3 do
+						for slotIndex = 1, 3 do
+							local slot = findPath(Workspace, "Shop", "Stands", "SlushieMachine_" .. machine, "Important", "Slot" .. slotIndex)
+							local swirl = slot and slot:FindFirstChild("Swirl")
+							if swirl and swirl:FindFirstChild(name) then
+								local holder = slot:FindFirstChild("Prompt")
+								local prompt = holder and holder:FindFirstChildOfClass("ProximityPrompt")
+								if prompt then
+									pcall(Env.fireproximityprompt, prompt)
+								end
+							end
+						end
+					end
+				end
+				task.wait(0.5)
+			end
+		end)
+	end
+
+	local DrinkToggle
+	DrinkToggle = addToggle("Shop", "Auto Drink Slushie", function(value)
+		if value then
+			if not Env.fireproximityprompt then
+				notify("Shop", "fireproximityprompt is not available in your executor.")
+				DrinkToggle.Set(false, true)
+				return
+			end
+			drinkSet(true)
+		else
+			drinkSet(false)
+		end
+	end)
+
+	table.insert(CleanupFns, function()
+		Slushie.dead = true
+		drinkSet(false)
+		for _, conn in ipairs(watchConns) do
+			conn:Disconnect()
+		end
+		table.clear(watchConns)
+	end)
+end
+
+addDropdown("Shop", {
+	name = "Items",
+	placeholder = "Items",
+	multi = false,
+	options = itemOptions(),
+	emptyText = "No items found",
+	onChange = function(selectedSet)
+		Selected.tool = next(selectedSet)
+	end,
+})
+
+addNote("Shop", "Note: You need an Orb of Shop Reset to find your selected tool.")
+
+do
+	local cooldownBox = addTextBox("Shop", "Cooldown Check", "0.6", function(text)
+		local trimmed = text:match("^%s*(.-)%s*$")
+		if trimmed:match("^%d*%.?%d*$") and trimmed:find("%d") then
+			local value = tonumber(trimmed)
+			if value and value == value and value ~= math.huge then
+				Finder.cooldown = value
+			end
+		end
+		return tostring(Finder.cooldown)
+	end)
+	cooldownBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local cleaned = cooldownBox.Text:gsub("[^%d%.]", "")
+		if cleaned ~= cooldownBox.Text then
+			cooldownBox.Text = cleaned
+		end
+	end)
+end
+
+addButton("Shop", "Find it in General", function()
+	runFinder(false)
+end)
+
+addButton("Shop", "Find it in Infinite Purchase", function()
+	runFinder(true)
+end)
+
+do
+	local function collectPeels()
+		local found = {}
+		for inst in pairs(Banana.owned) do
+			if inst.Parent then
+				table.insert(found, inst)
+			end
+		end
+		return found
+	end
+
+	local function peelPart(inst)
+		if inst:IsA("Model") then
+			return inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true)
+		end
+		return inst
+	end
+
+	local PeelForce = { amount = 300 }
+
+	addTextBox("Troll", "Force", "300", function(text)
+		local value = tonumber(text)
+		if value and value == value and math.abs(value) ~= math.huge then
+			PeelForce.amount = value
+		end
+		return tostring(PeelForce.amount)
+	end)
+
+	local function flingBananaPeels()
+		boostSimulation()
+		local parts = {}
+		for _, inst in ipairs(collectPeels()) do
+			local part = peelPart(inst)
+			if part and not part.Anchored then
+				table.insert(parts, part)
+			end
+		end
+		local directions = {}
+		for index = 1, #parts do
+			local dir = Vector3.new(math.random() * 2 - 1, math.random() * 0.8 + 0.2, math.random() * 2 - 1)
+			if dir.Magnitude < 0.01 then
+				dir = Vector3.new(0, 1, 0)
+			end
+			directions[index] = dir.Unit
+		end
+		for _ = 1, 8 do
+			for index, part in ipairs(parts) do
+				if part.Parent then
+					part.AssemblyLinearVelocity = directions[index] * PeelForce.amount
+					part.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+			task.wait()
+		end
+	end
+
+	local function deleteBananaPeels()
+		boostSimulation()
+		local peels = collectPeels()
+		local voidY = math.max(Workspace.FallenPartsDestroyHeight, -50000) - 1000
+		for _ = 1, 10 do
+			for _, inst in ipairs(peels) do
+				if inst.Parent then
+					local part = peelPart(inst)
+					if part then
+						local position = part.Position
+						local target = CFrame.new(position.X, voidY, position.Z)
+						if inst:IsA("Model") then
+							inst:PivotTo(target)
+						else
+							inst.CFrame = target
+						end
+						part.AssemblyLinearVelocity = Vector3.zero
+						part.AssemblyAngularVelocity = Vector3.zero
+					end
+				end
+			end
+			task.wait()
+		end
+	end
+
+	local function bringBananaPeels()
+		boostSimulation()
+		local peels = collectPeels()
+		local offsets = {}
+		for index = 1, #peels do
+			offsets[index] = Vector3.new(math.random() * 4 - 2, math.random() * 2 + 1, math.random() * 4 - 2)
+		end
+		for _ = 1, 3 do
+			local root = getRoot()
+			if not root then
+				return
+			end
+			local base = root.Position
+			for index, inst in ipairs(peels) do
+				if inst.Parent then
+					local part = peelPart(inst)
+					if part then
+						local cf = CFrame.new(base + offsets[index])
+						if inst:IsA("Model") then
+							inst:PivotTo(cf)
+						else
+							inst.CFrame = cf
+						end
+						part.AssemblyLinearVelocity = Vector3.zero
+						part.AssemblyAngularVelocity = Vector3.zero
+					end
+				end
+			end
+			task.wait()
+		end
+	end
+
+	addToggle("Shop", "Always Double Money", function(value)
+		moneySet(value)
+	end)
+
+	addToggle("Shop", "Buy 10x times", function(value)
+		FireTimes.count = value and 10 or 1
+	end)
+
+	local SpamToolToggle
+	SpamToolToggle = addToggle("Shop", "Spam Buy infinite purchase tool", function(value)
+		if value then
+			if not Env.fireproximityprompt then
+				notify("Shop", "fireproximityprompt is not available in your executor.")
+				SpamToolToggle.Set(false, true)
+				return
+			end
+			spamToolSet(true)
+		else
+			spamToolSet(false)
+		end
+	end)
+
+	local OrbToggle
+	OrbToggle = addToggle("Shop", "Spam buy Orb of shop reset", function(value)
+		if value then
+			if not Env.fireproximityprompt then
+				notify("Shop", "fireproximityprompt is not available in your executor.")
+				OrbToggle.Set(false, true)
+				return
+			end
+			Spam.orb.start()
+		else
+			Spam.orb.stop()
+		end
+	end)
+
+	local ItemToggle
+	ItemToggle = addToggle("Shop", "Spam Random Items", function(value)
+		if value then
+			if not Env.fireproximityprompt then
+				notify("Shop", "fireproximityprompt is not available in your executor.")
+				ItemToggle.Set(false, true)
+				return
+			end
+			Spam.item.start()
+		else
+			Spam.item.stop()
+		end
+	end)
+
+	local PeelBusy = false
+	local function runPeelAction(action)
+		if PeelBusy then
+			return
+		end
+		PeelBusy = true
+		task.spawn(function()
+			pcall(action)
+			PeelBusy = false
+		end)
+	end
+
+	addButton("Troll", "Fling all banana peels", function()
+		runPeelAction(flingBananaPeels)
+	end)
+
+	addButton("Troll", "Delete All Banana Peels", function()
+		runPeelAction(deleteBananaPeels)
+	end)
+
+	addToggle("Troll", "Banana Peel Tornado", function(value)
+		Tornado.set(value)
+	end)
+
+	addButton("Troll", "Bring All Banana Peels to Me", function()
+		runPeelAction(bringBananaPeels)
+	end)
+end
+
+do
+	local InfoViewer = {
+		player = nil,
+		conns = {},
+		backpackConns = {},
+		charConns = {},
+		amountConns = {},
+		dirty = false,
+		setters = {},
+		tools = nil,
+	}
+
+	local InfoFields = { "Cash", "Class", "FazCoins", "Inventory", "Shop", "Chat Available", "EquippedTitle" }
+
+	local bindInfoPlayer
+
+	local function infoPlayerOptions()
+		return listOtherPlayers()
+	end
+
+	local InfoDropdown = addDropdown("Info Viewer", {
+		name = "Players",
+		placeholder = "Players",
+		multi = false,
+		options = {},
+		emptyText = "No Player Found",
+		onChange = function(selectedSet)
+			local name = next(selectedSet)
+			local plr = name and Players:FindFirstChild(name) or nil
+			if plr and not plr:IsA("Player") then
+				plr = nil
+			end
+			bindInfoPlayer(plr)
+		end,
+	})
+	InfoDropdown.SetOptions(infoPlayerOptions())
+
+	for _, field in ipairs(InfoFields) do
+		InfoViewer.setters[field] = addInfoRow("Info Viewer", field)
+	end
+
+	InfoViewer.tools = addLinesBox("Info Viewer", "Tools")
+
+	local function formatNumber(value)
+		if value ~= value or value == math.huge or value == -math.huge then
+			return tostring(value)
+		end
+		local sign = value < 0 and "-" or ""
+		local text = string.format("%.2f", math.abs(value))
+		local whole, fraction = text:match("^(%d+)(%.%d+)$")
+		if not whole then
+			return tostring(value)
+		end
+		if fraction == ".00" then
+			fraction = ""
+		end
+		local grouped = whole:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+		grouped = grouped:gsub("^,", "")
+		return sign .. grouped .. fraction
+	end
+
+	local function formatInfoValue(value)
+		if value == nil then
+			return "N/A"
+		end
+		if type(value) == "number" then
+			return formatNumber(value)
+		end
+		if type(value) == "string" then
+			return value == "" and "None" or value
+		end
+		return tostring(value)
+	end
+
+	local function isEnabledText(value)
+		return tostring(value):lower() == "enabled"
+	end
+
+	local function infoFieldText(plr, field)
+		if field == "Inventory" then
+			return plr:GetAttribute("Inventory") == true and "true" or "false"
+		end
+		if field == "Chat Available" then
+			local enabled = isEnabledText(plr:GetAttribute("ChatAvailabilityStatus"))
+			local status = plr:FindFirstChild("ChatAvailabilityStatus")
+			if not enabled and status and status:IsA("ValueBase") then
+				enabled = isEnabledText(status.Value)
+			end
+			return enabled and "true" or "false"
+		end
+		return formatInfoValue(plr:GetAttribute(field))
+	end
+
+	local function collectToolLines(plr)
+		local totals = {}
+		local order = {}
+		local function add(container)
+			if not container then
+				return
+			end
+			for _, child in ipairs(container:GetChildren()) do
+				if child:IsA("Tool") then
+					local amount = 1
+					local config = child:FindFirstChild("Configuration")
+					local value = config and config:FindFirstChild("ToolAmount")
+					if value and value:IsA("ValueBase") and type(value.Value) == "number" then
+						amount = value.Value
+					end
+					if totals[child.Name] == nil then
+						totals[child.Name] = 0
+						table.insert(order, child.Name)
+					end
+					totals[child.Name] += amount
+				end
+			end
+		end
+		add(plr:FindFirstChildOfClass("Backpack"))
+		add(plr.Character)
+		table.sort(order, function(a, b)
+			return a:lower() < b:lower()
+		end)
+		local lines = {}
+		for _, name in ipairs(order) do
+			local total = totals[name]
+			if total ~= 1 then
+				table.insert(lines, name .. " x" .. formatNumber(total))
+			else
+				table.insert(lines, name)
+			end
+		end
+		return lines
+	end
+
+	local function refreshInfo()
+		local plr = InfoViewer.player
+		if not plr or not plr.Parent then
+			for _, field in ipairs(InfoFields) do
+				InfoViewer.setters[field]("-")
+			end
+			InfoViewer.tools.Set({}, "Select a player")
+			return
+		end
+		for _, field in ipairs(InfoFields) do
+			InfoViewer.setters[field](infoFieldText(plr, field))
+		end
+		local lines = collectToolLines(plr)
+		local note = nil
+		if not plr:FindFirstChildOfClass("Backpack") then
+			if #lines == 0 then
+				note = "Backpack is hidden by the game. No tool in hand."
+			else
+				note = "Backpack is hidden by the game. Showing the tool in hand only."
+			end
+		elseif #lines == 0 then
+			note = "No tools"
+		end
+		InfoViewer.tools.Set(lines, note)
+	end
+
+	local function scheduleInfoRefresh()
+		if InfoViewer.dirty then
+			return
+		end
+		InfoViewer.dirty = true
+		task.defer(function()
+			InfoViewer.dirty = false
+			pcall(refreshInfo)
+		end)
+	end
+
+	local function infoRelevant(inst)
+		return inst:IsA("Tool") or inst.Name == "Configuration" or inst.Name == "ToolAmount"
+	end
+
+	local function hookAmount(inst)
+		if (inst.Name == "ToolAmount" or inst.Name == "ChatAvailabilityStatus") and inst:IsA("ValueBase") and not InfoViewer.amountConns[inst] then
+			InfoViewer.amountConns[inst] = inst.Changed:Connect(scheduleInfoRefresh)
+		end
+	end
+
+	local function unhookAmount(inst)
+		local conn = InfoViewer.amountConns[inst]
+		if conn then
+			conn:Disconnect()
+			InfoViewer.amountConns[inst] = nil
+		end
+	end
+
+	local function disconnectList(list)
+		for _, conn in ipairs(list) do
+			conn:Disconnect()
+		end
+		table.clear(list)
+	end
+
+	local function hookContainer(container, list)
+		table.insert(list, container.DescendantAdded:Connect(function(inst)
+			hookAmount(inst)
+			if infoRelevant(inst) then
+				scheduleInfoRefresh()
+			end
+		end))
+		table.insert(list, container.DescendantRemoving:Connect(function(inst)
+			unhookAmount(inst)
+			if infoRelevant(inst) then
+				scheduleInfoRefresh()
+			end
+		end))
+		for _, descendant in ipairs(container:GetDescendants()) do
+			hookAmount(descendant)
+		end
+	end
+
+	local function unbindInfo()
+		disconnectList(InfoViewer.conns)
+		disconnectList(InfoViewer.backpackConns)
+		disconnectList(InfoViewer.charConns)
+		for _, conn in pairs(InfoViewer.amountConns) do
+			conn:Disconnect()
+		end
+		table.clear(InfoViewer.amountConns)
+		InfoViewer.player = nil
+	end
+
+	bindInfoPlayer = function(plr)
+		unbindInfo()
+		InfoViewer.player = plr
+		if plr then
+			table.insert(InfoViewer.conns, plr.AttributeChanged:Connect(scheduleInfoRefresh))
+			table.insert(InfoViewer.conns, plr.ChildAdded:Connect(function(child)
+				if child:IsA("Backpack") then
+					disconnectList(InfoViewer.backpackConns)
+					hookContainer(child, InfoViewer.backpackConns)
+					scheduleInfoRefresh()
+				end
+				if child.Name == "ChatAvailabilityStatus" then
+					hookAmount(child)
+					scheduleInfoRefresh()
+				end
+			end))
+			table.insert(InfoViewer.conns, plr.ChildRemoved:Connect(function(child)
+				if child:IsA("Backpack") then
+					disconnectList(InfoViewer.backpackConns)
+					scheduleInfoRefresh()
+				end
+				if child.Name == "ChatAvailabilityStatus" then
+					unhookAmount(child)
+					scheduleInfoRefresh()
+				end
+			end))
+			local chatStatus = plr:FindFirstChild("ChatAvailabilityStatus")
+			if chatStatus then
+				hookAmount(chatStatus)
+			end
+			table.insert(InfoViewer.conns, plr.CharacterAdded:Connect(function(char)
+				disconnectList(InfoViewer.charConns)
+				hookContainer(char, InfoViewer.charConns)
+				scheduleInfoRefresh()
+			end))
+			table.insert(InfoViewer.conns, plr.CharacterRemoving:Connect(function()
+				disconnectList(InfoViewer.charConns)
+				scheduleInfoRefresh()
+			end))
+			local backpack = plr:FindFirstChildOfClass("Backpack")
+			if backpack then
+				hookContainer(backpack, InfoViewer.backpackConns)
+			end
+			if plr.Character then
+				hookContainer(plr.Character, InfoViewer.charConns)
+			end
+		end
+		refreshInfo()
+	end
+
+	local infoOptionsPending = false
+	local function scheduleInfoOptions()
+		if infoOptionsPending then
+			return
+		end
+		infoOptionsPending = true
+		task.delay(0.2, function()
+			infoOptionsPending = false
+			InfoDropdown.SetOptions(infoPlayerOptions())
+		end)
+	end
+
+	local InfoPlayerAddedConn = Players.PlayerAdded:Connect(scheduleInfoOptions)
+	local InfoPlayerRemovingConn = Players.PlayerRemoving:Connect(function(plr)
+		if plr == InfoViewer.player then
+			bindInfoPlayer(nil)
+		end
+		scheduleInfoOptions()
+	end)
+
+	bindInfoPlayer(nil)
+	table.insert(CleanupFns, function()
+		unbindInfo()
+		InfoPlayerAddedConn:Disconnect()
+		InfoPlayerRemovingConn:Disconnect()
+	end)
+end
+
+showTab("Main")
+
+local function toggleWindow()
+	WindowGui.Enabled = not WindowGui.Enabled
+end
+
+do
+	local dragInput = nil
+	local dragStart = nil
+	local startPos = nil
+	TitleBar.InputBegan:Connect(function(input)
+		if dragInput then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragInput = input
+			dragStart = Vector2.new(input.Position.X, input.Position.Y)
+			startPos = Vector2.new(WindowFrame.Position.X.Offset, WindowFrame.Position.Y.Offset)
+		end
+	end)
+	table.insert(Features, UserInputService.InputChanged:Connect(function(input)
+		if not dragInput then
+			return
+		end
+		local matches = input == dragInput or (dragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement)
+		if not matches then
+			return
+		end
+		local delta = Vector2.new(input.Position.X, input.Position.Y) - dragStart
+		local vp = WindowGui.AbsoluteSize
+		local x = startPos.X + delta.X
+		local y = startPos.Y + delta.Y
+		if vp.X > 0 and vp.Y > 0 then
+			x = math.clamp(x, 0, math.max(0, vp.X - WIN_W))
+			y = math.clamp(y, 0, math.max(0, vp.Y - WIN_H))
+		end
+		WindowFrame.Position = UDim2.fromOffset(x, y)
+	end))
+	table.insert(Features, UserInputService.InputEnded:Connect(function(input)
+		if not dragInput then
+			return
+		end
+		local matches = input == dragInput or (dragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1)
+		if matches then
+			dragInput = nil
+		end
+	end))
+end
+
+local FreddyGui = nil
+local keyConn = nil
+
+if isMobile then
+	local BUTTON_W = 70
+	local BUTTON_H = 32
+	local gui = makeInst("ScreenGui", {
+		Name = "FreddyToggle",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		DisplayOrder = 1000,
+	}, getGuiParent())
+	FreddyGui = gui
+	local btn = makeInst("TextButton", {
+		Name = "Nytix",
+		Size = UDim2.fromOffset(BUTTON_W, BUTTON_H),
+		Position = UDim2.fromOffset(12, 120),
+		BackgroundColor3 = Color3.fromRGB(70, 40, 160),
+		BackgroundTransparency = 0.15,
+		Text = "Nytix",
+		TextColor3 = COLOR_TEXT,
+		TextSize = 14,
+		Font = Enum.Font.GothamBold,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, gui)
+	addCorner(btn, 6)
+	makeInst("UIStroke", { Color = Color3.fromRGB(63, 201, 255), Thickness = 1.5 }, btn)
+	local function moveTo(x, y)
+		local vp = gui.AbsoluteSize
+		if vp.X > 0 and vp.Y > 0 then
+			x = math.clamp(x, 0, math.max(0, vp.X - BUTTON_W))
+			y = math.clamp(y, 0, math.max(0, vp.Y - BUTTON_H))
+		end
+		btn.Position = UDim2.fromOffset(x, y)
+	end
+	local dragInput = nil
+	local dragStart = nil
+	local startPos = nil
+	local moved = false
+	btn.InputBegan:Connect(function(input)
+		if dragInput then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragInput = input
+			moved = false
+			dragStart = Vector2.new(input.Position.X, input.Position.Y)
+			startPos = Vector2.new(btn.Position.X.Offset, btn.Position.Y.Offset)
+		end
+	end)
+	table.insert(Features, UserInputService.InputChanged:Connect(function(input)
+		if not dragInput then
+			return
+		end
+		local matches = input == dragInput or (dragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement)
+		if not matches then
+			return
+		end
+		local delta = Vector2.new(input.Position.X, input.Position.Y) - dragStart
+		if moved or delta.Magnitude > 6 then
+			moved = true
+			moveTo(startPos.X + delta.X, startPos.Y + delta.Y)
+		end
+	end))
+	table.insert(Features, UserInputService.InputEnded:Connect(function(input)
+		if not dragInput then
+			return
+		end
+		local matches = input == dragInput or (dragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1)
+		if not matches then
+			return
+		end
+		local wasMoved = moved
+		dragInput = nil
+		if not wasMoved then
+			toggleWindow()
+		end
+	end))
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		moveTo(btn.Position.X.Offset, btn.Position.Y.Offset)
+	end)
+else
+	keyConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed or input.KeyCode ~= Enum.KeyCode.X then
+			return
+		end
+		if UserInputService:GetFocusedTextBox() then
+			return
+		end
+		toggleWindow()
+	end)
+end
+
+notify("Nytix (Infinite Nights With Freddy)", "Successfully Loaded")
+
+GlobalEnv.FreddyCleanup = function()
+	for _, fn in ipairs(CleanupFns) do
+		pcall(fn)
+	end
+	if AntiAfkConn then
+		AntiAfkConn:Disconnect()
+	end
+	GlobalEnv.FreddyAntiAfk = nil
+	moneySet(false)
+	moneyHalt()
+	instantSet(false)
+	God.on = false
+	Intermission.on = false
+	for _, job in ipairs(Jobs) do
+		job.enabled = false
+		if job.active then
+			finishJob(job)
+		end
+	end
+	bananaSet(false)
+	flingSet(false)
+	Tornado.set(false)
+	spamToolSet(false)
+	spamActivateSet(false)
+	FireTimes.count = 1
+	FullBright.set(false)
+	NoFog.set(false)
+	playersESPSet(false)
+	animESPSet(false)
+	Spam.orb.stop()
+	Spam.item.stop()
+	if Finder.running then
+		stopFinder()
+	end
+	AnimDropdownWatch.Stop()
+	if keyConn then
+		keyConn:Disconnect()
+	end
+	for _, conn in ipairs(Features) do
+		pcall(function()
+			conn:Disconnect()
+		end)
+	end
+	if FreddyGui then
+		FreddyGui:Destroy()
+	end
+	if ToastGui then
+		ToastGui:Destroy()
+	end
+	WindowGui:Destroy()
+end
