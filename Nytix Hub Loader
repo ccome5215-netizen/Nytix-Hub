@@ -3,13 +3,12 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
-local StarterGui = game:GetService("StarterGui")
 
 local LocalPlayer = Players.LocalPlayer
 
 local GAMES = {
 	{
-		name = "Infinite Nights With Freddy (DOOM)",
+		name = "[FREDBEAR] Infinite Nights With Freddy (DOOM)",
 		placeId = 81156978660382,
 		lobbyPlaceId = 92415748858497,
 		universeId = 8204806107,
@@ -29,6 +28,7 @@ local COLOR_ROW = Color3.fromRGB(36, 24, 78)
 local COLOR_LIST = Color3.fromRGB(26, 17, 58)
 local COLOR_VIOLET = Color3.fromRGB(135, 85, 245)
 local COLOR_CYAN = Color3.fromRGB(45, 135, 225)
+local COLOR_GREEN = Color3.fromRGB(50, 170, 80)
 local COLOR_PINK = Color3.fromRGB(255, 122, 217)
 local COLOR_GRAY = Color3.fromRGB(62, 52, 96)
 local COLOR_TEXT = Color3.fromRGB(255, 255, 255)
@@ -403,17 +403,17 @@ local function getState(entry)
 		return false, "Place ID missing"
 	end
 	if entry.lobbyPlaceId and game.PlaceId == entry.lobbyPlaceId then
-		return true, "Execute", true
+		return false, "In Lobby"
 	end
 	if game.PlaceId ~= entry.placeId then
-		return false, "Nothing Supported"
+		return false, "Not Supported"
 	end
-	return true, "Execute", false
+	return true, "Execute"
 end
 
 local warnings = {}
 for index, entry in ipairs(GAMES) do
-	local supported, label, inLobby = getState(entry)
+	local supported, label = getState(entry)
 	local row = makeInst("Frame", {
 		Size = UDim2.new(1, 0, 0, 54),
 		BackgroundColor3 = COLOR_ROW,
@@ -455,7 +455,7 @@ for index, entry in ipairs(GAMES) do
 	local button = makeInst("TextButton", {
 		Size = UDim2.fromOffset(122, 30),
 		Position = UDim2.new(1, -130, 0.5, -15),
-		BackgroundColor3 = supported and COLOR_CYAN or COLOR_GRAY,
+		BackgroundColor3 = supported and COLOR_GREEN or COLOR_GRAY,
 		Text = label,
 		TextColor3 = supported and COLOR_TEXT or COLOR_MUTED,
 		Font = Enum.Font.GothamBold,
@@ -469,24 +469,9 @@ for index, entry in ipairs(GAMES) do
 	elseif label == "Link missing" then
 		table.insert(warnings, entry.name .. ": no link set.")
 	end
-	local lastNotice = 0
 	if supported then
 		track(button.MouseButton1Click:Connect(function()
 			if busy or closing then
-				return
-			end
-			if inLobby then
-				local now = os.clock()
-				if now - lastNotice >= 1 then
-					lastNotice = now
-					pcall(function()
-						StarterGui:SetCore("SendNotification", {
-							Title = "Nytix Hub",
-							Text = "You are in lobby. Please join the In Game, not In Lobby.",
-							Duration = 5,
-						})
-					end)
-				end
 				return
 			end
 			busy = true
@@ -504,7 +489,7 @@ for index, entry in ipairs(GAMES) do
 				if not ok or type(source) ~= "string" or source == "" then
 					setWarning("Download failed for " .. entry.name .. ". Try again.")
 					button.Text = "Execute"
-					button.BackgroundColor3 = COLOR_CYAN
+					button.BackgroundColor3 = COLOR_GREEN
 					button.TextColor3 = COLOR_TEXT
 					busy = false
 					return
@@ -513,7 +498,7 @@ for index, entry in ipairs(GAMES) do
 				if not fn then
 					setWarning("Script error for " .. entry.name .. ": " .. tostring(compileError))
 					button.Text = "Execute"
-					button.BackgroundColor3 = COLOR_CYAN
+					button.BackgroundColor3 = COLOR_GREEN
 					button.TextColor3 = COLOR_TEXT
 					busy = false
 					return
